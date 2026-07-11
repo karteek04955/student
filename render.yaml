@@ -1,6 +1,7 @@
 services:
   - type: web
     name: student-os
+    plan: free
     runtime: node
     buildCommand: npm install
     startCommand: node server.js
