@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incharge Portal — StudentOS</title>
+  <meta name="description" content="Class Incharge management dashboard for StudentOS." />
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="stylesheet" href="/css/student.css" />
+  <link rel="stylesheet" href="/css/incharge.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body class="incharge-layout">
+
+  <!-- Mobile sidebar overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="app-layout">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">👩‍🏫</div>
+        <div>
+          <div class="logo-text">InchargeOS</div>
+          <div class="logo-sub">Incharge Portal</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" style="background:var(--gold);color:var(--navy);">IC</div>
+        <div style="min-width:0;">
+          <div class="sidebar-user-name">Class Incharge</div>
+          <div class="sidebar-user-course">Administrator</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Overview</div>
+        <button class="nav-item active" data-section="dashboard">
+          <span class="nav-icon">🏠</span> Dashboard
+        </button>
+        <button class="nav-item" data-section="students">
+          <span class="nav-icon">👥</span> Students
+        </button>
+
+        <div class="nav-section-label">Manage</div>
+        <button class="nav-item" data-section="timetable">
+          <span class="nav-icon">📅</span> Timetable
+        </button>
+        <button class="nav-item" data-section="assignments">
+          <span class="nav-icon">📋</span> Assignments
+        </button>
+        <button class="nav-item" data-section="marks">
+          <span class="nav-icon">🎓</span> Marks
+        </button>
+        <button class="nav-item" data-section="attendance">
+          <span class="nav-icon">📊</span> Attendance
+        </button>
+
+        <div class="nav-section-label">Reports</div>
+        <button class="nav-item" data-section="export">
+          <span class="nav-icon">📤</span> Export to Excel
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <!-- dark-toggle kept for JS compat but hidden via CSS -->
+        <div class="dark-toggle" id="darkToggle">
+          <div class="toggle-switch on" id="darkToggleSw"></div>
+        </div>
+        <button class="btn-logout" id="logoutBtn">🚪 Logout</button>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN CONTENT ═══ -->
+    <main class="main-content">
+      <header class="top-header">
+        <div style="display:flex; align-items:center; gap:0;">
+          <button class="hamburger" id="hamburger" aria-label="Open menu">
+            <span></span><span></span><span></span>
+          </button>
+          <div>
+            <div class="page-title" id="headerTitle">Dashboard</div>
+            <div class="page-subtitle" id="headerSubtitle">Overview &amp; quick stats</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="chip" id="headerTime"></div>
+        </div>
+      </header>
+
+      <div class="page-content">
+
+        <!-- ═══ SECTION: DASHBOARD ═══ -->
+        <section class="section active" id="section-dashboard">
+          <div class="welcome-banner incharge-welcome">
+            <h2>Welcome, <span id="dashWelcomeName">Incharge</span>! 👩‍🏫</h2>
+            <p>Manage your class from one unified dashboard.</p>
+            <div class="welcome-date" id="dashDate"></div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--blue-bg);">👥</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statStudents">—</div>
+                <div class="stat-label">Total Students</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--amber-bg);">📋</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statAssignments">—</div>
+                <div class="stat-label">Assignments</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--blue-bg);">🎓</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statMarks">—</div>
+                <div class="stat-label">Mark Records</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--gold-pale);">📅</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statTimetable">—</div>
+                <div class="stat-label">Timetable Entries</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">👥 Recent Students</div>
+                <button class="btn btn-secondary btn-sm" onclick="loadInchargeSection('students')">View All</button>
+              </div>
+              <div id="dashRecentStudents"><div class="spinner" style="margin:20px auto;"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">📋 Pending Assignments</div>
+                <button class="btn btn-secondary btn-sm" onclick="loadInchargeSection('assignments')">Manage</button>
+              </div>
+              <div id="dashPendingAssignments"><div class="spinner" style="margin:20px auto;"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: STUDENTS ═══ -->
+        <section class="section" id="section-students">
+          <div class="section-header">
+            <div class="section-title">👥 All Students</div>
+          </div>
+          <div id="studentsContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: TIMETABLE ═══ -->
+        <section class="section" id="section-timetable">
+          <div class="section-header">
+            <div class="section-title">📅 Timetable Manager</div>
+          </div>
+          <div id="timetableFormArea"></div>
+          <div id="timetableListArea">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: ASSIGNMENTS ═══ -->
+        <section class="section" id="section-assignments">
+          <div class="section-header">
+            <div class="section-title">📋 Assignments Manager</div>
+          </div>
+          <div id="assignmentsContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+
+          <!-- Completions Modal -->
+          <div class="modal-overlay" id="completionsModal">
+            <div class="modal">
+              <div class="modal-header">
+                <h3 id="completionsModalTitle">Assignment Completions</h3>
+                <button class="modal-close" onclick="closeCompletionsModal()">✕</button>
+              </div>
+              <div id="completionsModalBody" class="completion-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: MARKS ═══ -->
+        <section class="section" id="section-marks">
+          <div class="section-header">
+            <div class="section-title">🎓 Marks Manager</div>
+          </div>
+          <div id="marksContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: ATTENDANCE ═══ -->
+        <section class="section" id="section-attendance">
+          <div class="section-header">
+            <div class="section-title">📊 Attendance Manager</div>
+          </div>
+          <div id="attendanceContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: EXPORT ═══ -->
+        <section class="section" id="section-export">
+          <div class="section-header">
+            <div class="section-title">📤 Export to Excel</div>
+          </div>
+          <div id="exportContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+      </div><!-- /page-content -->
+    </main>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/incharge.js"></script>
+  <script>
+    function updateClock() {
+      const el = document.getElementById('headerTime');
+      if (el) el.textContent = '🕐 ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>

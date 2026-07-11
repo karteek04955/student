@@ -1,0 +1,55 @@
+/* ═══════════════════════════════════════════════════════════
+   incharge.css — Incharge Portal Specific Styles
+   (Most shared styles live in global.css)
+═══════════════════════════════════════════════════════════ */
+
+/* ── Incharge layout body ───────────────────────────────────── */
+.incharge-layout { background: var(--bg); }
+
+/* ── Student detail panel in attendance ───────────────────── */
+#attCurrentDisplay .stat-card { margin: 0; }
+
+/* ── Marks form card extra ─────────────────────────────────── */
+.marks-form-card .grid-2 { margin-bottom: 0; }
+
+/* ── Timetable list area ─────────────────────────────────────── */
+#timetableListArea h3,
+#marksListArea h3,
+#assignListArea h3 {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+
+/* ── Search bar in marks area ─────────────────────────────── */
+#marksListArea .flex-between .search-input {
+  max-width: 220px;
+}
+
+/* ── Student grid in attendance select ──────────────────────── */
+#attCurrentDisplay {
+  display: flex;
+  align-items: center;
+}
+
+/* ── Dashboard Incharge welcome ─────────────────────────────── */
+.incharge-welcome span { color: var(--gold-light); }
+
+/* ── Export page heading card ────────────────────────────────── */
+#exportContent > .card h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+/* ── Timetable table wrapper override ───────────────────────── */
+#timetableListArea .table-wrapper { border-radius: var(--radius-xl); }
+
+/* ── Responsive tweaks ──────────────────────────────────────── */
+@media (max-width: 600px) {
+  .marks-student-header { flex-wrap: wrap; font-size: 0.85rem; }
+  .export-card { padding: 22px 18px; }
+}

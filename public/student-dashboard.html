@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Portal — StudentOS</title>
+  <meta name="description" content="StudentOS student dashboard — timetable, notes, assignments, attendance, marks, analytics and AI assistant." />
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="stylesheet" href="/css/student.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Mobile sidebar overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="app-layout">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">🎓</div>
+        <div>
+          <div class="logo-text">StudentOS</div>
+          <div class="logo-sub">Student Portal</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" id="sidebarAvatar">ST</div>
+        <div style="min-width:0;">
+          <div class="sidebar-user-name" id="sidebarUserName">Loading…</div>
+          <div class="sidebar-user-course" id="sidebarUserCourse">Course</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Main</div>
+        <button class="nav-item active" data-section="dashboard">
+          <span class="nav-icon">🏠</span> Dashboard
+        </button>
+        <button class="nav-item" data-section="timetable">
+          <span class="nav-icon">📅</span> Timetable
+        </button>
+        <button class="nav-item" data-section="notes">
+          <span class="nav-icon">📝</span> My Notes
+        </button>
+
+        <div class="nav-section-label">Academics</div>
+        <button class="nav-item" data-section="assignments">
+          <span class="nav-icon">📋</span> Assignments
+        </button>
+        <button class="nav-item" data-section="attendance">
+          <span class="nav-icon">📊</span> Attendance
+        </button>
+        <button class="nav-item" data-section="marks">
+          <span class="nav-icon">🎓</span> Marks
+        </button>
+        <button class="nav-item" data-section="analytics">
+          <span class="nav-icon">📈</span> Analytics
+        </button>
+
+        <div class="nav-section-label">Tools</div>
+        <button class="nav-item" data-section="ai">
+          <span class="nav-icon">🤖</span> AI Assistant
+        </button>
+        <button class="nav-item" data-section="profile">
+          <span class="nav-icon">👤</span> My Profile
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <!-- dark-toggle kept for JS compat but hidden via CSS -->
+        <div class="dark-toggle" id="darkToggle">
+          <div class="toggle-switch on" id="darkToggleSw"></div>
+        </div>
+        <button class="btn-logout" id="logoutBtn">🚪 Logout</button>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN CONTENT ═══ -->
+    <main class="main-content">
+
+      <!-- Top Header -->
+      <header class="top-header">
+        <div style="display:flex; align-items:center; gap:0;">
+          <button class="hamburger" id="hamburger" aria-label="Open menu">
+            <span></span><span></span><span></span>
+          </button>
+          <div>
+            <div class="page-title" id="headerTitle">Dashboard</div>
+            <div class="page-subtitle" id="headerSubtitle">Welcome back!</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="chip" id="headerTime"></div>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="page-content">
+
+        <!-- ═══ SECTION: DASHBOARD ═══ -->
+        <section class="section active" id="section-dashboard">
+          <div class="welcome-banner">
+            <h2>Good Day, <span id="dashWelcomeName">Student</span>! 👋</h2>
+            <p>Here's your academic overview for today.</p>
+            <div class="welcome-date" id="dashDate"></div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--green-bg);">📊</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statAttendance">—</div>
+                <div class="stat-label">Attendance</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--amber-bg);">⏳</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statPending">—</div>
+                <div class="stat-label">Pending Tasks</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--blue-bg);">🎓</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statMarks">—</div>
+                <div class="stat-label">Avg Score</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:var(--gold-pale);">📝</div>
+              <div class="stat-info">
+                <div class="stat-value" id="statNotes">—</div>
+                <div class="stat-label">My Notes</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">📋 Upcoming Assignments</div>
+                <button class="btn btn-secondary btn-sm" onclick="loadSection('assignments')">View All</button>
+              </div>
+              <div id="dashAssignments"><div class="spinner" style="margin:20px auto;"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">🎓 Recent Marks</div>
+                <button class="btn btn-secondary btn-sm" onclick="loadSection('marks')">View All</button>
+              </div>
+              <div id="dashMarks"><div class="spinner" style="margin:20px auto;"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: TIMETABLE ═══ -->
+        <section class="section" id="section-timetable">
+          <div class="section-header">
+            <div class="section-title">📅 Class Timetable</div>
+          </div>
+          <div class="timetable-grid" id="timetableContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: NOTES ═══ -->
+        <section class="section" id="section-notes">
+          <div class="section-header">
+            <div class="section-title">📝 My Notes</div>
+            <button class="btn btn-primary" onclick="openNewNoteModal()">+ New Note</button>
+          </div>
+          <div id="notesContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+
+          <!-- Note Modal -->
+          <div class="modal-overlay" id="noteModal">
+            <div class="modal">
+              <div class="modal-header">
+                <h3 id="noteModalTitle">New Note</h3>
+                <button class="modal-close" onclick="closeNoteModal()">✕</button>
+              </div>
+              <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="noteTitle" placeholder="Note title…" />
+              </div>
+              <div class="form-group">
+                <label>Content</label>
+                <textarea id="noteContent" placeholder="Write your note here…" rows="6"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Colour</label>
+                <input type="color" id="noteColor" value="#C89B3C" style="height:42px; padding:4px; cursor:pointer; border-radius:8px;" />
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-secondary" onclick="closeNoteModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveNote()">💾 Save Note</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: ASSIGNMENTS ═══ -->
+        <section class="section" id="section-assignments">
+          <div class="section-header">
+            <div class="section-title">📋 Assignments</div>
+          </div>
+          <div id="assignmentsContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: ATTENDANCE ═══ -->
+        <section class="section" id="section-attendance">
+          <div class="section-header">
+            <div class="section-title">📊 My Attendance</div>
+          </div>
+          <div id="attendanceContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: MARKS ═══ -->
+        <section class="section" id="section-marks">
+          <div class="section-header">
+            <div class="section-title">🎓 My Marks</div>
+          </div>
+          <div id="marksContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: ANALYTICS ═══ -->
+        <section class="section" id="section-analytics">
+          <div class="section-header">
+            <div class="section-title">📈 Analytics</div>
+          </div>
+          <div id="analyticsContent">
+            <div class="loading-container"><div class="spinner"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ SECTION: AI ASSISTANT ═══ -->
+        <section class="section" id="section-ai">
+          <div class="loading-container"><div class="spinner"></div></div>
+        </section>
+
+        <!-- ═══ SECTION: PROFILE ═══ -->
+        <section class="section" id="section-profile">
+          <div class="profile-header">
+            <div class="profile-avatar-large" id="profileInitials">ST</div>
+            <div class="profile-info">
+              <h2 id="profileName">Loading…</h2>
+              <p id="profileCourse">Course</p>
+            </div>
+          </div>
+          <div class="profile-fields">
+            <div class="profile-field">
+              <div class="field-label">Full Name</div>
+              <div class="field-value" id="profileFieldName">—</div>
+            </div>
+            <div class="profile-field">
+              <div class="field-label">Email Address</div>
+              <div class="field-value" id="profileFieldEmail">—</div>
+            </div>
+            <div class="profile-field">
+              <div class="field-label">Roll Number</div>
+              <div class="field-value" id="profileFieldRoll">—</div>
+            </div>
+            <div class="profile-field">
+              <div class="field-label">Course / Branch</div>
+              <div class="field-value" id="profileFieldCourse">—</div>
+            </div>
+            <div class="profile-field">
+              <div class="field-label">Member Since</div>
+              <div class="field-value" id="profileFieldJoined">—</div>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /page-content -->
+    </main>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ai-assistant.js"></script>
+  <script src="/js/student.js"></script>
+  <script>
+    // Live clock
+    function updateClock() {
+      const el = document.getElementById('headerTime');
+      if (el) el.textContent = '🕐 ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>
