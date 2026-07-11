@@ -29,8 +29,8 @@ function renderAISection(apiKey) {
           <div>
             <div style="font-family:var(--font-body); font-weight:700; color:var(--navy); font-size:0.9rem; line-height:1.2;">StudyBot AI</div>
             <div style="font-size:0.75rem; color:var(--text-2); display:flex; align-items:center; gap:5px; line-height:1.2; margin-top:2px;">
-              <span style="width:7px; height:7px; background:${apiKey ? 'var(--green)' : 'var(--amber)'}; border-radius:50%; display:inline-block;"></span>
-              ${apiKey ? 'Online · Ready' : 'Setup Required'}
+              <span style="width:7px; height:7px; background:var(--green); border-radius:50%; display:inline-block;"></span>
+              Online · Ready
             </div>
           </div>
         </div>
@@ -39,19 +39,6 @@ function renderAISection(apiKey) {
           <button class="btn btn-secondary btn-sm" onclick="showKeyModal()">API Key</button>
         </div>
       </div>
-
-      ${!apiKey ? `
-        <div class="ai-key-setup" style="padding:16px 20px; background:var(--gold-pale); border-bottom:1px solid var(--border); flex-shrink:0;">
-          <p style="font-size:0.8rem; color:var(--text-1); line-height:1.5;">
-            ⚡ <strong>Groq API Key Required</strong> — Enter your free Groq API key to activate the study assistant.
-            <a href="https://console.groq.com" target="_blank" style="color:var(--gold); font-weight:700; text-decoration:underline;">Get one free here</a>
-          </p>
-          <div style="display:flex; gap:10px; margin-top:10px;">
-            <input type="password" id="apiKeyInline" placeholder="gsk_..." class="search-input" style="flex:1;" />
-            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save Key</button>
-          </div>
-        </div>
-      ` : ''}
 
       <div class="ai-messages" id="chatMessages">
         <div class="ai-message assistant">
@@ -62,7 +49,7 @@ function renderAISection(apiKey) {
             🧮 Math & Science problems<br>
             ✍️ Essay writing tips<br>
             🎯 Exam preparation strategies<br><br>
-            ${apiKey ? 'Ask me anything! 🔥' : '<strong style="color:var(--amber);">Please set your Groq API key above to start chatting.</strong>'}
+            Ask me anything! 🔥
           </div>
         </div>
       </div>
@@ -71,10 +58,9 @@ function renderAISection(apiKey) {
         <input
           type="text"
           id="aiInput"
-          placeholder="${apiKey ? 'Ask anything...' : 'Set your API key first...'}"
-          ${!apiKey ? 'disabled' : ''}
+          placeholder="Ask anything..."
         />
-        <button class="ai-send-btn" id="aiSendBtn" onclick="sendAIMessage()" ${!apiKey ? 'disabled' : ''}>
+        <button class="ai-send-btn" id="aiSendBtn" onclick="sendAIMessage()">
           Send
         </button>
       </div>
@@ -88,12 +74,12 @@ function renderAISection(apiKey) {
           <button class="modal-close" onclick="closeKeyModal()">✕</button>
         </div>
         <p style="margin-bottom:16px; font-size:0.85rem; color:var(--text-2); line-height:1.6;">
-          Your API key is stored locally in your browser and never sent to our servers.
+          Your custom API key is stored locally in your browser and never sent to our servers. Leave blank to use the secure Server Default Key.
           <br><br>
           <a href="https://console.groq.com/keys" target="_blank" style="color:var(--gold); font-weight:700; text-decoration:underline;">Get your free API key here →</a>
         </p>
         <div class="form-group">
-          <label>Groq API Key</label>
+          <label>Custom Groq API Key</label>
           <input type="password" id="modalApiKey" placeholder="gsk_..." value="${apiKey}" />
         </div>
         <div class="form-actions">
@@ -120,7 +106,6 @@ function renderAISection(apiKey) {
 async function sendAIMessage() {
   if (isThinking) return;
   const apiKey = localStorage.getItem('groqApiKey');
-  if (!apiKey) { showToast('Please set your Groq API key first', 'warning'); return; }
 
   const input = document.getElementById('aiInput');
   const message = input.value.trim();
@@ -140,33 +125,48 @@ async function sendAIMessage() {
   const typingId = showTyping();
 
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content: `You are StudyBot AI, a helpful and encouraging AI study assistant for college students. 
+    let response;
+    if (apiKey) {
+      // Use student's custom API key
+      response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `You are StudyBot AI, a helpful and encouraging AI study assistant for college students. 
 You specialize in explaining academic concepts clearly, helping with homework, exam preparation, and providing study tips.
 Be friendly, concise, and use emojis occasionally. Format code or math nicely when needed.`
-          },
-          ...conversationHistory,
-        ],
-        max_tokens: 1024,
-        temperature: 0.7,
-      }),
-    });
+            },
+            ...conversationHistory,
+          ],
+          max_tokens: 1024,
+          temperature: 0.7,
+        }),
+      });
+    } else {
+      // Use secure server-side proxy
+      response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: conversationHistory,
+        }),
+      });
+    }
 
     removeTyping(typingId);
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error?.message || 'API request failed');
+      throw new Error(err.error?.message || err.error || 'API request failed');
     }
 
     const data = await response.json();

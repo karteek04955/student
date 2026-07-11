@@ -670,6 +670,55 @@ app.use(express.static(path.join(__dirname, 'public')));
     }
   });
 
+  // ═══════════════════════════════════════
+  //  AI CHAT ROUTE (SECURE PROXY)
+  // ═══════════════════════════════════════
+  app.post('/api/ai/chat', async (req, res) => {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array is required' });
+    }
+
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) {
+      return res.status(500).json({ error: 'Groq API Key is not configured on the server.' });
+    }
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `You are StudyBot AI, a helpful and encouraging AI study assistant for college students. 
+You specialize in explaining academic concepts clearly, helping with homework, exam preparation, and providing study tips.
+Be friendly, concise, and use emojis occasionally. Format code or math nicely when needed.`
+            },
+            ...messages,
+          ],
+          max_tokens: 1024,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || 'Groq API request failed');
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // Catch-all — serve frontend
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
