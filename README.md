@@ -1,5 +1,7 @@
 # StudentOS 🚀
 
+[![Deploy to Render](https://render.com/images/deploy-to-render.svg)](https://render.com/deploy?repo=https://github.com/karteek04955/student)
+
 A modern, responsive **College Management Platform** designed for students and class incharges to track schedules, marks, assignments, attendance, and study notes. The platform is built on a robust Node.js/Express backend and is fully backed by **MongoDB Atlas** for secure, real-time database management.
 
 ---

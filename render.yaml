@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: student-os
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        placeholder: "Enter your standard MongoDB connection URI"
+      - key: GROQ_API_KEY
+        placeholder: "Enter your Groq API key"
