@@ -196,7 +196,7 @@
 
       <div class="info-pill">
         <span class="icon">💡</span>
-        <span>First time? No problem — your account is created automatically using your roll number. Just fill in the details below.</span>
+        <span>First time? Register your details below. Once approved by the class incharge, you will be able to log in instantly.</span>
       </div>
 
       <div id="errorBox" class="error-box"></div>
@@ -257,11 +257,25 @@
 
       try {
         const data = await api.student.login({ name, course, email, roll_number });
-        localStorage.setItem('currentStudent', JSON.stringify(data.student));
-        showToast('Welcome! Redirecting to your portal…', 'success');
-        setTimeout(() => { window.location.href = '/student-dashboard.html'; }, 700);
+        if (data.pendingApproval) {
+          errEl.innerHTML = `⏳ <strong>Registration Sent!</strong><br>Your registration is pending approval from the class incharge. Please contact your incharge to approve your account.`;
+          errEl.style.backgroundColor = 'var(--amber-bg)';
+          errEl.style.color = 'var(--amber)';
+          errEl.style.borderColor = 'rgba(217,119,6,0.2)';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Enter Student Portal →';
+          showToast('Registration pending incharge approval ⏳', 'warning');
+        } else {
+          localStorage.setItem('currentStudent', JSON.stringify(data.student));
+          showToast('Welcome! Redirecting to your portal…', 'success');
+          setTimeout(() => { window.location.href = '/student-dashboard.html'; }, 700);
+        }
       } catch (err) {
-        errEl.textContent = '❌ ' + err.message;
+        errEl.innerHTML = '❌ ' + err.message;
+        errEl.style.backgroundColor = 'var(--red-bg)';
+        errEl.style.color = 'var(--red)';
+        errEl.style.borderColor = 'rgba(220,38,38,0.2)';
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Enter Student Portal →';

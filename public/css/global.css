@@ -16,6 +16,7 @@
   --gold:        #C89B3C;
   --gold-light:  #D4AF5C;
   --gold-pale:   rgba(200,155,60,0.10);
+  --dot-color:   rgba(31,42,68,0.055);
 
   /* Text */
   --text-1:  #1F2A44;
@@ -73,6 +74,7 @@
   --yellow: #D97706;
 }
 
+
 /* ── Reset & Base ──────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -92,7 +94,7 @@ body {
 body::before {
   content: '';
   position: fixed; inset: 0; z-index: 0;
-  background-image: radial-gradient(circle, rgba(31,42,68,0.055) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
   background-size: 26px 26px;
   pointer-events: none;
 }
@@ -256,9 +258,63 @@ body::before {
   padding: 14px 18px;
   border-top: 1px solid rgba(255,255,255,0.07);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.dark-toggle { display: none; }  /* removed from new design */
+.dark-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--t);
+  user-select: none;
+}
+
+.dark-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.dark-toggle::before {
+  content: '🌓 Dark Mode';
+  font-weight: 500;
+}
+
+.toggle-switch {
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-pill);
+  position: relative;
+  transition: var(--t);
+}
+
+.toggle-switch::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: var(--t);
+}
+
+.toggle-switch.on {
+  background: var(--gold);
+}
+
+.toggle-switch.on::after {
+  left: 19px;
+}
 
 .btn-logout {
   width: 100%;

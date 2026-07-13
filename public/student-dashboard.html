@@ -61,6 +61,9 @@
         </button>
 
         <div class="nav-section-label">Tools</div>
+        <button class="nav-item" data-section="quiz">
+          <span class="nav-icon">🧠</span> Quiz Generator
+        </button>
         <button class="nav-item" data-section="ai">
           <span class="nav-icon">🤖</span> AI Assistant
         </button>
@@ -71,7 +74,7 @@
 
       <div class="sidebar-footer">
         <!-- dark-toggle kept for JS compat but hidden via CSS -->
-        <div class="dark-toggle" id="darkToggle">
+        <div class="dark-toggle" id="darkToggle" style="display:none !important;">
           <div class="toggle-switch on" id="darkToggleSw"></div>
         </div>
         <button class="btn-logout" id="logoutBtn">🚪 Logout</button>
@@ -107,6 +110,9 @@
             <p>Here's your academic overview for today.</p>
             <div class="welcome-date" id="dashDate"></div>
           </div>
+
+          <!-- Assignment Reminders Area -->
+          <div id="assignmentRemindersArea" style="margin-bottom: 24px; display: none;"></div>
 
           <div class="stats-grid">
             <div class="stat-card">
@@ -197,8 +203,8 @@
                 <input type="color" id="noteColor" value="#C89B3C" style="height:42px; padding:4px; cursor:pointer; border-radius:8px;" />
               </div>
               <div class="form-actions">
-                <button class="btn btn-secondary" onclick="closeNoteModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveNote()">💾 Save Note</button>
+                <button class="btn btn-secondary" onclick="closeNoteModal()" id="cancelNoteBtn">Cancel</button>
+                <button class="btn btn-primary" onclick="saveNote()" id="saveNoteBtn">💾 Save Note</button>
               </div>
             </div>
           </div>
@@ -244,6 +250,83 @@
           </div>
         </section>
 
+        <!-- ═══ SECTION: QUIZ GENERATOR ═══ -->
+        <section class="section" id="section-quiz">
+          <div class="section-header">
+            <div class="section-title">🧠 AI Quiz Generator</div>
+          </div>
+          <div id="quizContent">
+            <!-- Form Card to Generate Quiz -->
+            <div class="card" id="quizGeneratorFormCard" style="padding: 24px; max-width: 600px; margin-bottom: 24px;">
+              <h3 style="margin-bottom: 16px;">📚 Generate a Practice Quiz</h3>
+              <p style="font-size: 0.88rem; color: var(--text-2); margin-bottom: 20px;">Use our Groq-powered AI helper to generate a custom multiple-choice quiz on any subject or topic instantly!</p>
+              
+              <div class="form-group">
+                <label>Topic / Subject</label>
+                <input type="text" id="quizTopic" class="form-input" placeholder="e.g. Data Structures, Photosynthesis, Calculus" style="width:100%;" />
+              </div>
+
+              <div class="grid-2" style="margin-bottom: 20px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Number of Questions</label>
+                  <select id="quizNumQuestions" class="form-input" style="width:100%;">
+                    <option value="5">5 Questions</option>
+                    <option value="10" selected>10 Questions</option>
+                    <option value="15">15 Questions</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Difficulty Level</label>
+                  <select id="quizDifficulty" class="form-input" style="width:100%;">
+                    <option value="Easy">Easy</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" id="quizGenerateBtn" onclick="generateQuiz()" style="width: 100%;">⚡ Generate Quiz via AI</button>
+            </div>
+
+            <!-- Quiz Play Area -->
+            <div class="card" id="quizPlayCard" style="display: none; padding: 24px;">
+              <div class="flex-between" style="border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px;">
+                <div>
+                  <h3 id="quizTitleDisplay">Practice Quiz</h3>
+                  <span class="badge badge-purple" id="quizMetaDisplay">Medium</span>
+                </div>
+                <div style="font-weight: 700; color: var(--gold);" id="quizScoreProgress">Question 1 of 10</div>
+              </div>
+
+              <div id="quizQuestionArea" style="margin-bottom: 24px;">
+                <div style="font-weight: 600; font-size: 1.1rem; color: var(--navy); margin-bottom: 16px;" id="quizQuestionText">Question goes here?</div>
+                <div style="display: flex; flex-direction: column; gap: 10px;" id="quizOptionsContainer">
+                  <!-- Option Buttons -->
+                </div>
+              </div>
+
+              <div class="flex-between" style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <button class="btn btn-secondary" onclick="exitQuiz()">🚪 Exit Quiz</button>
+                <button class="btn btn-primary" id="quizNextBtn" onclick="nextQuizQuestion()" disabled>Next Question ➡️</button>
+              </div>
+            </div>
+
+            <!-- Quiz Results Area -->
+            <div class="card" id="quizResultsCard" style="display: none; padding: 30px; text-align: center; max-width: 500px; margin: 0 auto;">
+              <div style="font-size: 4rem; margin-bottom: 16px;">🏆</div>
+              <h3 style="margin-bottom: 10px;">Quiz Completed!</h3>
+              <p style="color: var(--text-2); margin-bottom: 20px;" id="quizScoreText">You scored 8 out of 10 (80%)</p>
+              
+              <div id="quizScoreFeedback" style="font-weight: 700; font-size: 1.1rem; color: var(--green); margin-bottom: 24px;">Great job! Keep learning.</div>
+
+              <div style="display:flex; gap:12px; justify-content:center;">
+                <button class="btn btn-primary" onclick="restartQuizGenerator()">Try Another Topic</button>
+                <button class="btn btn-secondary" onclick="exitQuiz()">Close</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- ═══ SECTION: AI ASSISTANT ═══ -->
         <section class="section" id="section-ai">
           <div class="loading-container"><div class="spinner"></div></div>
@@ -258,26 +341,59 @@
               <p id="profileCourse">Course</p>
             </div>
           </div>
-          <div class="profile-fields">
-            <div class="profile-field">
-              <div class="field-label">Full Name</div>
-              <div class="field-value" id="profileFieldName">—</div>
+          
+          <!-- View Mode -->
+          <div id="profileViewMode">
+            <div class="profile-fields">
+              <div class="profile-field">
+                <div class="field-label">Full Name</div>
+                <div class="field-value" id="profileFieldName">—</div>
+              </div>
+              <div class="profile-field">
+                <div class="field-label">Email Address</div>
+                <div class="field-value" id="profileFieldEmail">—</div>
+              </div>
+              <div class="profile-field">
+                <div class="field-label">Roll Number</div>
+                <div class="field-value" id="profileFieldRoll">—</div>
+              </div>
+              <div class="profile-field">
+                <div class="field-label">Course / Branch</div>
+                <div class="field-value" id="profileFieldCourse">—</div>
+              </div>
+              <div class="profile-field">
+                <div class="field-label">Member Since</div>
+                <div class="field-value" id="profileFieldJoined">—</div>
+              </div>
             </div>
-            <div class="profile-field">
-              <div class="field-label">Email Address</div>
-              <div class="field-value" id="profileFieldEmail">—</div>
+            <div style="margin-top:24px;">
+              <button class="btn btn-primary" onclick="toggleProfileEdit(true)">✏️ Edit Profile</button>
             </div>
-            <div class="profile-field">
-              <div class="field-label">Roll Number</div>
-              <div class="field-value" id="profileFieldRoll">—</div>
+          </div>
+
+          <!-- Edit Mode -->
+          <div id="profileEditMode" style="display:none;">
+            <div class="profile-fields" style="display:flex; flex-direction:column; gap:16px;">
+              <div class="form-group" style="margin:0;">
+                <label>Full Name</label>
+                <input type="text" id="editProfileName" class="form-input" style="width:100%;" />
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Email Address</label>
+                <input type="email" id="editProfileEmail" class="form-input" style="width:100%;" />
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Roll Number (Read-only)</label>
+                <input type="text" id="editProfileRoll" class="form-input" style="width:100%; background:var(--bg-hover);" readonly />
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Course / Branch</label>
+                <input type="text" id="editProfileCourse" class="form-input" style="width:100%;" />
+              </div>
             </div>
-            <div class="profile-field">
-              <div class="field-label">Course / Branch</div>
-              <div class="field-value" id="profileFieldCourse">—</div>
-            </div>
-            <div class="profile-field">
-              <div class="field-label">Member Since</div>
-              <div class="field-value" id="profileFieldJoined">—</div>
+            <div class="form-actions" style="margin-top:24px; display:flex; gap:12px;">
+              <button class="btn btn-primary" onclick="saveProfileDetails()">💾 Save Changes</button>
+              <button class="btn btn-secondary" onclick="toggleProfileEdit(false)">✕ Cancel</button>
             </div>
           </div>
         </section>

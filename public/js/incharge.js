@@ -44,15 +44,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sidebar   = document.getElementById('sidebar');
   const overlay   = document.getElementById('sidebarOverlay');
 
-  if (hamburger && sidebar) {
-    hamburger.addEventListener('click', () => {
-      sidebar.classList.toggle('open');
-      if (overlay) overlay.classList.toggle('active');
-    });
-  }
-
   if (overlay) {
     overlay.addEventListener('click', closeSidebar);
+  }
+
+  // Dark mode switch handler
+  const darkToggle = document.getElementById('darkToggle');
+  const darkToggleSw = document.getElementById('darkToggleSw');
+  if (darkToggle && darkToggleSw) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    darkToggleSw.classList.toggle('on', isDark);
+
+    darkToggle.addEventListener('click', () => {
+      const turnDark = !darkToggleSw.classList.contains('on');
+      darkToggleSw.classList.toggle('on', turnDark);
+      applyDarkMode(turnDark);
+      showToast(turnDark ? 'Dark Mode Enabled 🌙' : 'Light Mode Enabled ☀️', 'success');
+    });
   }
 });
 
@@ -84,6 +92,7 @@ async function loadInchargeSection(section) {
     assignments: { title: 'Assignments Manager', sub: 'Create and track assignments' },
     marks:       { title: 'Marks Manager',      sub: 'Assign marks to students' },
     attendance:  { title: 'Attendance Manager', sub: 'Update student attendance' },
+    notes:       { title: 'Notes Manager',      sub: 'Create and manage class-wide or individual notes' },
     export:      { title: 'Export to Excel',    sub: 'Export data reports' },
   };
 
@@ -98,6 +107,7 @@ async function loadInchargeSection(section) {
     assignments: loadAssignmentManager,
     marks: loadMarksManager,
     attendance: loadAttendanceManager,
+    notes: loadNotesManager,
     export: loadExportPage,
   };
   if (loaders[section]) await loaders[section]();
@@ -167,16 +177,47 @@ async function loadStudentList() {
       container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><h3>No students registered yet</h3><p>Students will appear here once they log in.</p></div>';
       return;
     }
+
+    const pending = allStudents.filter(s => s.approved === false);
+    const approved = allStudents.filter(s => s.approved !== false);
+
+    let pendingHtml = '';
+    if (pending.length > 0) {
+      pendingHtml = `
+        <div class="pending-approvals-card" style="background:var(--amber-bg); border:1px solid rgba(217,119,6,0.15); padding:24px; border-radius:var(--radius-lg); margin-bottom:30px;">
+          <h3 style="color:var(--amber); margin-bottom:14px; display:flex; align-items:center; gap:8px;">⏳ Pending Approvals (${pending.length})</h3>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            ${pending.map(s => `
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:var(--bg-card); padding:16px; border-radius:var(--radius); border:1px solid var(--border);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="student-avatar" style="width:36px; height:36px; font-size:0.875rem;">${getInitials(s.name)}</div>
+                  <div>
+                    <div style="font-weight:700; color:var(--navy);">${escapeHtml(s.name)}</div>
+                    <div style="font-size:0.78rem; color:var(--text-2);">${s.roll_number} • ${escapeHtml(s.course)} • ${s.email}</div>
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn btn-success btn-sm" onclick="approveStudent('${s.id}')">Approve</button>
+                  <button class="btn btn-danger btn-sm" onclick="removeStudent('${s.id}', true)">Reject</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     container.innerHTML = `
+      ${pendingHtml}
       <div class="filter-bar">
-        <input type="text" class="search-input" placeholder="🔍 Search by name, roll number, or course..." oninput="filterStudents(this.value)" />
-        <span class="badge badge-primary">${allStudents.length} Students</span>
+        <input type="text" class="search-input" placeholder="🔍 Search approved students by name, roll, or course..." oninput="filterStudents(this.value)" />
+        <span class="badge badge-primary">${approved.length} Approved Students</span>
       </div>
       <div class="student-list-grid" id="studentGrid">
-        ${allStudents.map(s => renderStudentCard(s)).join('')}
+        ${approved.map(s => renderStudentCard(s)).join('')}
       </div>
     `;
-  } catch {
+  } catch (err) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><h3>Error loading students</h3></div>';
   }
 }
@@ -185,11 +226,12 @@ function renderStudentCard(s) {
   return `
     <div class="student-list-card" data-name="${s.name.toLowerCase()}" data-roll="${s.roll_number.toLowerCase()}" data-course="${s.course.toLowerCase()}">
       <div class="student-avatar">${getInitials(s.name)}</div>
-      <div>
-        <div class="student-card-name">${escapeHtml(s.name)}</div>
-        <div class="student-card-roll">🎫 ${s.roll_number}</div>
-        <div class="student-card-course"><span class="badge badge-cyan">${escapeHtml(s.course)}</span></div>
+      <div style="flex:1; min-width:0;">
+        <div class="student-card-name" style="font-weight:700; color:var(--navy);">${escapeHtml(s.name)}</div>
+        <div class="student-card-roll" style="font-size:0.8rem; color:var(--text-2);">🎫 ${s.roll_number}</div>
+        <div class="student-card-course" style="margin-top:4px;"><span class="badge badge-cyan">${escapeHtml(s.course)}</span></div>
       </div>
+      <button class="btn btn-icon btn-danger btn-sm" onclick="removeStudent('${s.id}')" title="Remove Student" style="margin-left:8px; opacity:0.85; transition:var(--t);">🗑️</button>
     </div>
   `;
 }
@@ -272,7 +314,7 @@ async function refreshTimetableList() {
                 <td><strong>${escapeHtml(e.subject)}</strong></td>
                 <td>${escapeHtml(e.timing)}</td>
                 <td>
-                  <button class="btn btn-danger btn-sm" onclick="deleteTimetableEntry(${e.id})">🗑️ Delete</button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteTimetableEntry('${e.id}')">🗑️ Delete</button>
                 </td>
               </tr>
             `).join('')}
@@ -424,8 +466,8 @@ async function refreshAssignmentList() {
                 </div>
               </div>
               <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
-                <button class="btn btn-secondary btn-sm" onclick="viewCompletions(${a.id}, '${escSubject}')">👁️ View</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteAssignment(${a.id})">🗑️</button>
+                <button class="btn btn-secondary btn-sm" onclick="viewCompletions('${a.id}', '${escSubject}')">👁️ View</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteAssignment('${a.id}')">🗑️</button>
               </div>
             </div>
           `;
@@ -469,32 +511,39 @@ function closeCompletionsModal() {
 }
 
 // ═══════════════════════════════════════
-//  MARKS MANAGER
+//  MARKS MANAGER (Bulk Subject Entry)
 // ═══════════════════════════════════════
 async function loadMarksManager() {
   await fetchStudents();
   const container = document.getElementById('marksContent');
-  container.innerHTML = `
-    <!-- Add Marks Form -->
-    <div class="marks-form-card">
-      <h3 style="margin-bottom:20px;">➕ Assign Marks</h3>
+  const approvedStudents = allStudents.filter(s => s.approved !== false);
 
+  container.innerHTML = `
+    <!-- Step 1: Setup -->
+    <div class="marks-form-card" id="marksSetupCard">
+      <h3 style="margin-bottom:6px;">📊 Bulk Marks Entry</h3>
+      <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:20px;">
+        Set the exam details and number of subjects, then fill all subject marks in one go.
+      </p>
+
+      <!-- Assign To -->
       <div class="form-group">
         <label>Assign To</label>
         <div class="assign-type-pills">
           <button class="assign-pill active" id="marksPillAll" onclick="setMarksAssignType('all')">🌐 All Students</button>
-          <button class="assign-pill" id="marksPillIndividual" onclick="setMarksAssignType('individual')">👤 Individual</button>
+          <button class="assign-pill" id="marksPillIndividual" onclick="setMarksAssignType('individual')">👤 Individual Student</button>
         </div>
       </div>
 
       <div id="marksStudentSelect" style="display:none;" class="form-group">
         <label>Select Student</label>
-        <select id="marksStudent">
+        <select id="marksStudent" style="width:100%;">
           <option value="">— Select a student —</option>
-          ${allStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.roll_number})</option>`).join('')}
+          ${approvedStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.roll_number})</option>`).join('')}
         </select>
       </div>
 
+      <!-- Exam Type -->
       <div class="form-group">
         <label>Exam Type</label>
         <div class="exam-type-selector">
@@ -503,31 +552,69 @@ async function loadMarksManager() {
         </div>
       </div>
 
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Exam Name</label>
-          <input type="text" id="marksExamName" placeholder="e.g. Semester I Final" />
-        </div>
-        <div class="form-group">
-          <label>Subject</label>
-          <input type="text" id="marksSubject" placeholder="e.g. Mathematics" />
-        </div>
-        <div class="form-group">
-          <label>Scored Marks</label>
-          <input type="number" id="markScored" min="0" placeholder="e.g. 85" />
-        </div>
-        <div class="form-group">
-          <label>Total Marks</label>
-          <input type="number" id="markTotal" min="1" placeholder="e.g. 100" />
-        </div>
+      <!-- Exam Name -->
+      <div class="form-group">
+        <label>Exam Name</label>
+        <input type="text" id="marksExamName" placeholder="e.g. Semester I Final, CAT-1" style="width:100%;" />
       </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick="submitMarks()">📊 Submit Marks</button>
+
+      <!-- Default Total Marks -->
+      <div class="form-group">
+        <label>Default Total Marks per Subject</label>
+        <input type="number" id="marksDefaultTotal" min="1" value="100" style="width:180px;" />
+        <span style="font-size:0.8rem; color:var(--text-2); margin-left:10px;">You can override per row</span>
+      </div>
+
+      <!-- Number of Subjects -->
+      <div class="form-group" style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:180px;">
+          <label>Number of Subjects</label>
+          <input type="number" id="marksSubjectCount" min="1" max="20" value="6" style="width:100%;" />
+        </div>
+        <button class="btn btn-secondary" onclick="generateSubjectRows()" style="height:44px; white-space:nowrap;">
+          ⚡ Generate Subject Rows
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Subject Rows Table (dynamically injected) -->
+    <div id="marksSubjectRowsCard" style="display:none; margin-top:20px;">
+      <div class="card" style="padding:24px;">
+        <div class="flex-between" style="margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h3 id="marksTableHeading">📋 Enter Marks for All Subjects</h3>
+            <p style="font-size:0.82rem; color:var(--text-2); margin-top:4px;" id="marksTableSubTitle"></p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="loadMarksManager()">↩ Reset Form</button>
+        </div>
+
+        <div class="table-wrapper" style="margin-bottom:20px;">
+          <table id="marksSubjectTable">
+            <thead>
+              <tr>
+                <th style="width:40px;">#</th>
+                <th>Subject Name</th>
+                <th style="width:140px;">Scored Marks</th>
+                <th style="width:140px;">Total Marks</th>
+                <th style="width:80px;">%</th>
+              </tr>
+            </thead>
+            <tbody id="marksSubjectTbody">
+              <!-- rows injected by generateSubjectRows() -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="submitBulkMarks()" style="min-width:200px;">
+            💾 Submit All Marks
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Marks List -->
-    <div id="marksListArea"></div>
+    <div id="marksListArea" style="margin-top:30px;"></div>
   `;
 
   await refreshMarksList();
@@ -546,16 +633,59 @@ function setExamType(type) {
   document.getElementById('examTypeCat').classList.toggle('active', type === 'cat');
 }
 
-async function submitMarks() {
-  const exam_name = document.getElementById('marksExamName').value.trim();
-  const subject = document.getElementById('marksSubject').value.trim();
-  const scored_marks = parseFloat(document.getElementById('markScored').value);
-  const total_marks = parseFloat(document.getElementById('markTotal').value);
+function generateSubjectRows() {
+  const count = parseInt(document.getElementById('marksSubjectCount').value);
+  const examName = document.getElementById('marksExamName').value.trim();
+  const defaultTotal = document.getElementById('marksDefaultTotal').value || '100';
 
-  if (!exam_name || !subject || isNaN(scored_marks) || isNaN(total_marks)) {
-    showToast('Please fill all fields', 'warning'); return;
-  }
-  if (scored_marks > total_marks) { showToast('Scored marks cannot exceed total marks', 'warning'); return; }
+  if (!examName) { showToast('Please enter an Exam Name first', 'warning'); return; }
+  if (!count || count < 1 || count > 20) { showToast('Enter a number of subjects between 1 and 20', 'warning'); return; }
+
+  // Show the rows card
+  document.getElementById('marksSubjectRowsCard').style.display = 'block';
+  document.getElementById('marksTableHeading').textContent = `📋 ${examName} — Enter Marks`;
+  document.getElementById('marksTableSubTitle').textContent =
+    `${marksExamType === 'sem' ? 'Semester Exam' : 'CAT / Mid Exam'} • ${count} Subject${count > 1 ? 's' : ''} • Fill all rows and submit at once`;
+
+  const tbody = document.getElementById('marksSubjectTbody');
+  tbody.innerHTML = Array.from({ length: count }, (_, i) => `
+    <tr id="markRow${i}">
+      <td style="font-weight:700; color:var(--gold);">${i + 1}</td>
+      <td>
+        <input type="text" id="mSubject${i}" class="form-input" placeholder="Subject name" style="width:100%; min-width:160px;" />
+      </td>
+      <td>
+        <input type="number" id="mScored${i}" class="form-input" min="0" placeholder="Scored" style="width:100%;"
+          oninput="updateRowPct(${i})" />
+      </td>
+      <td>
+        <input type="number" id="mTotal${i}" class="form-input" min="1" value="${defaultTotal}" style="width:100%;"
+          oninput="updateRowPct(${i})" />
+      </td>
+      <td>
+        <span id="mPct${i}" class="badge badge-primary" style="font-size:0.75rem;">—</span>
+      </td>
+    </tr>
+  `).join('');
+
+  // Scroll to the table
+  document.getElementById('marksSubjectRowsCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateRowPct(i) {
+  const scored = parseFloat(document.getElementById(`mScored${i}`).value);
+  const total  = parseFloat(document.getElementById(`mTotal${i}`).value);
+  const pctEl  = document.getElementById(`mPct${i}`);
+  if (!pctEl) return;
+  if (isNaN(scored) || isNaN(total) || total <= 0) { pctEl.textContent = '—'; pctEl.className = 'badge badge-primary'; return; }
+  const pct = Math.round(scored / total * 100);
+  pctEl.textContent = `${pct}%`;
+  pctEl.className = `badge ${pct >= 75 ? 'badge-success' : pct >= 50 ? 'badge-warning' : 'badge-danger'}`;
+}
+
+async function submitBulkMarks() {
+  const exam_name = document.getElementById('marksExamName').value.trim();
+  const defaultTotal = parseFloat(document.getElementById('marksDefaultTotal').value) || 100;
 
   let student_id = 'all';
   if (marksAssignType === 'individual') {
@@ -563,18 +693,51 @@ async function submitMarks() {
     if (!student_id) { showToast('Please select a student', 'warning'); return; }
   }
 
+  // Collect all rows
+  const tbody = document.getElementById('marksSubjectTbody');
+  if (!tbody) { showToast('Please generate subject rows first', 'warning'); return; }
+  const rowCount = tbody.querySelectorAll('tr').length;
+
+  const entries = [];
+  for (let i = 0; i < rowCount; i++) {
+    const subject = document.getElementById(`mSubject${i}`)?.value.trim();
+    const scored_marks = parseFloat(document.getElementById(`mScored${i}`)?.value);
+    const total_marks  = parseFloat(document.getElementById(`mTotal${i}`)?.value) || defaultTotal;
+
+    if (!subject) { showToast(`Row ${i + 1}: Please enter a subject name`, 'warning'); return; }
+    if (isNaN(scored_marks)) { showToast(`Row ${i + 1} (${subject}): Please enter scored marks`, 'warning'); return; }
+    if (scored_marks > total_marks) { showToast(`Row ${i + 1} (${subject}): Scored marks exceed total marks`, 'warning'); return; }
+
+    entries.push({ subject, scored_marks, total_marks });
+  }
+
+  if (entries.length === 0) { showToast('No subject rows found', 'warning'); return; }
+
   try {
-    await api.marks.add({ student_id, exam_type: marksExamType, exam_name, subject, scored_marks, total_marks });
-    showToast(`Marks assigned ${student_id === 'all' ? 'to all students' : ''}! ✅`, 'success');
-    document.getElementById('marksExamName').value = '';
-    document.getElementById('marksSubject').value = '';
-    document.getElementById('markScored').value = '';
-    document.getElementById('markTotal').value = '';
-    await refreshMarksList();
+    // Submit all entries concurrently
+    await Promise.all(entries.map(e =>
+      api.marks.add({
+        student_id,
+        exam_type: marksExamType,
+        exam_name,
+        subject: e.subject,
+        scored_marks: e.scored_marks,
+        total_marks: e.total_marks,
+      })
+    ));
+
+    const target = student_id === 'all' ? 'all students' : 'the selected student';
+    showToast(`✅ ${entries.length} subject marks submitted for ${target}!`, 'success');
+
+    // Reset form
+    await loadMarksManager();
+    // Scroll to list
+    setTimeout(() => document.getElementById('marksListArea')?.scrollIntoView({ behavior: 'smooth' }), 400);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast('Error submitting marks: ' + err.message, 'error');
   }
 }
+
 
 async function refreshMarksList() {
   const container = document.getElementById('marksListArea');
@@ -622,7 +785,12 @@ async function refreshMarksList() {
                       <td>${m.scored_marks}</td>
                       <td>${m.total_marks}</td>
                       <td><span class="badge ${pct >= 75 ? 'badge-success' : pct >= 50 ? 'badge-warning' : 'badge-danger'}">${pct}%</span></td>
-                      <td><button class="btn btn-danger btn-sm" onclick="deleteMark(${m.id})">🗑️</button></td>
+                      <td>
+                        <div style="display:flex; gap:6px;">
+                          <button class="btn btn-secondary btn-sm" onclick="openEditMarkModal('${m.id}')" title="Edit">✏️</button>
+                          <button class="btn btn-danger btn-sm" onclick="deleteMark('${m.id}')">🗑️</button>
+                        </div>
+                      </td>
                     </tr>
                   `;
                 }).join('')}
@@ -656,41 +824,86 @@ async function deleteMark(id) {
 async function loadAttendanceManager() {
   await fetchStudents();
   const container = document.getElementById('attendanceContent');
+  
   container.innerHTML = `
-    <div class="attendance-form-card">
-      <h3>📝 Update Attendance</h3>
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Select Student</label>
-          <select id="attStudent" onchange="loadStudentAttendance()">
-            <option value="">— Select a student —</option>
-            ${allStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.roll_number})</option>`).join('')}
-          </select>
-        </div>
-        <div id="attCurrentDisplay" style="display:flex; align-items:center;">
-          <div style="font-size:0.875rem; color:var(--text-2);">Select a student to view current attendance</div>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Days Present</label>
-          <input type="number" id="attPresent" min="0" placeholder="e.g. 42" />
-        </div>
-        <div class="form-group">
-          <label>Total Working Days</label>
-          <input type="number" id="attTotal" min="0" placeholder="e.g. 60" />
+    <!-- Tabs for attendance modes -->
+    <div class="marks-tabs" style="margin-bottom:20px;">
+      <button class="marks-tab active" id="attModeCalendar" onclick="switchAttendanceMode('calendar')">📅 Daily Calendar Tracker</button>
+      <button class="marks-tab" id="attModeCumulative" onclick="switchAttendanceMode('cumulative')">📊 Bulk Cumulative Updates</button>
+    </div>
+
+    <!-- Calendar Mode -->
+    <div id="attendanceCalendarArea">
+      <div class="attendance-form-card" style="margin-bottom:24px;">
+        <h3>📅 Daily Attendance</h3>
+        <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:16px;">Select a date to mark daily present/absent statuses for all students.</p>
+        <div class="form-group" style="max-width:280px;">
+          <label>Select Date</label>
+          <input type="date" id="dailyAttDate" class="form-input" onchange="fetchDailyAttendance()" />
         </div>
       </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick="updateAttendance()">💾 Save Attendance</button>
+      
+      <div id="dailyAttendanceListCard" class="card" style="display:none; padding:24px;">
+        <div class="flex-between" style="margin-bottom:18px; flex-wrap:wrap; gap:10px;">
+          <h4>Students List (<span id="dailyAttCount">0</span> approved students)</h4>
+          <button class="btn btn-secondary btn-sm" onclick="markAllDailyAttendance('present')">Mark All Present</button>
+        </div>
+        <div id="dailyAttListGrid" style="display:flex; flex-direction:column; gap:12px; margin-bottom:24px;">
+          <!-- dynamically populated -->
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="saveDailyAttendance()">💾 Save Daily Attendance</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cumulative Mode (Original layout) -->
+    <div id="attendanceCumulativeArea" style="display:none;">
+      <div class="attendance-form-card">
+        <h3>📝 Update Attendance</h3>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Select Student</label>
+            <select id="attStudent" onchange="loadStudentAttendance()">
+              <option value="">— Select a student —</option>
+              ${allStudents.filter(s => s.approved !== false).map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.roll_number})</option>`).join('')}
+            </select>
+          </div>
+          <div id="attCurrentDisplay" style="display:flex; align-items:center;">
+            <div style="font-size:0.875rem; color:var(--text-2);">Select a student to view current attendance</div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Days Present</label>
+            <input type="number" id="attPresent" min="0" placeholder="e.g. 42" />
+          </div>
+          <div class="form-group">
+            <label>Total Working Days</label>
+            <input type="number" id="attTotal" min="0" placeholder="e.g. 60" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="updateAttendance()">💾 Save Attendance</button>
+        </div>
       </div>
     </div>
 
     <!-- Attendance Table -->
-    <div id="attendanceTableArea"></div>
+    <div id="attendanceTableArea" style="margin-top:30px;"></div>
   `;
 
+  // Set default date in calendar input to today's local date
+  const dateInput = document.getElementById('dailyAttDate');
+  if (dateInput) {
+    const local = new Date();
+    const offset = local.getTimezoneOffset();
+    const localDate = new Date(local.getTime() - (offset * 60 * 1000));
+    dateInput.value = localDate.toISOString().split('T')[0];
+  }
+
   await refreshAttendanceTable();
+  await fetchDailyAttendance();
 }
 
 async function loadStudentAttendance() {
@@ -896,4 +1109,359 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/* ── STUDENT APPROVALS & DELETIONS ── */
+async function approveStudent(id) {
+  try {
+    await api.student.approve(id);
+    showToast('Student approved! ✅', 'success');
+    await loadStudentList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function removeStudent(id, isReject = false) {
+  const label = isReject ? 'reject this student registration' : 'permanently remove this student and all their data';
+  if (!confirm(`Are you sure you want to ${label}?`)) return;
+  try {
+    await api.student.delete(id);
+    showToast(isReject ? 'Registration rejected' : 'Student removed successfully', 'info');
+    await loadStudentList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/* ── DAILY ATTENDANCE CALENDAR TRACKER ── */
+function switchAttendanceMode(mode) {
+  const calArea = document.getElementById('attendanceCalendarArea');
+  const cumArea = document.getElementById('attendanceCumulativeArea');
+  const calBtn = document.getElementById('attModeCalendar');
+  const cumBtn = document.getElementById('attModeCumulative');
+
+  if (calArea && cumArea && calBtn && cumBtn) {
+    calArea.style.display = mode === 'calendar' ? 'block' : 'none';
+    cumArea.style.display = mode === 'cumulative' ? 'block' : 'none';
+    calBtn.classList.toggle('active', mode === 'calendar');
+    cumBtn.classList.toggle('active', mode === 'cumulative');
+  }
+}
+
+let currentDailyAttendance = [];
+
+async function fetchDailyAttendance() {
+  const date = document.getElementById('dailyAttDate').value;
+  const listCard = document.getElementById('dailyAttendanceListCard');
+  const listGrid = document.getElementById('dailyAttListGrid');
+  const countSpan = document.getElementById('dailyAttCount');
+
+  if (!date || !listCard || !listGrid) return;
+
+  const approvedStudents = allStudents.filter(s => s.approved !== false);
+  countSpan.textContent = approvedStudents.length;
+
+  if (approvedStudents.length === 0) {
+    listCard.style.display = 'block';
+    listGrid.innerHTML = '<div class="empty-state"><p>No approved students to mark attendance.</p></div>';
+    return;
+  }
+
+  listCard.style.display = 'block';
+  listGrid.innerHTML = '<div class="loading-container"><div class="spinner"></div></div>';
+
+  try {
+    const existing = await api.attendance.getByDate(date);
+    currentDailyAttendance = approvedStudents.map(s => {
+      const rec = existing.find(r => r.student_id === s.id);
+      return {
+        student_id: s.id,
+        name: s.name,
+        roll: s.roll_number,
+        status: rec ? rec.status : 'present'
+      };
+    });
+
+    renderDailyAttendanceList();
+  } catch (err) {
+    listGrid.innerHTML = `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
+  }
+}
+
+function renderDailyAttendanceList() {
+  const listGrid = document.getElementById('dailyAttListGrid');
+  if (!listGrid) return;
+
+  listGrid.innerHTML = currentDailyAttendance.map(item => {
+    const isPresent = item.status === 'present';
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--border);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="student-avatar" style="width:32px; height:32px; font-size:0.75rem;">${getInitials(item.name)}</div>
+          <div>
+            <div style="font-weight:600; color:var(--navy); font-size:0.875rem;">${escapeHtml(item.name)}</div>
+            <div style="font-size:0.75rem; color:var(--text-2);">${item.roll}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-sm ${isPresent ? 'btn-success' : 'btn-secondary'}" onclick="toggleDailyStudentStatus('${item.student_id}', 'present')" style="padding:6px 14px;">Present</button>
+          <button class="btn btn-sm ${!isPresent ? 'btn-danger' : 'btn-secondary'}" onclick="toggleDailyStudentStatus('${item.student_id}', 'absent')" style="padding:6px 14px;">Absent</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleDailyStudentStatus(studentId, status) {
+  const item = currentDailyAttendance.find(i => i.student_id === studentId);
+  if (item) {
+    item.status = status;
+    renderDailyAttendanceList();
+  }
+}
+
+function markAllDailyAttendance(status) {
+  currentDailyAttendance.forEach(i => i.status = status);
+  renderDailyAttendanceList();
+}
+
+async function saveDailyAttendance() {
+  const date = document.getElementById('dailyAttDate').value;
+  if (!date) return;
+  try {
+    const body = currentDailyAttendance.map(i => ({ student_id: i.student_id, status: i.status }));
+    await api.attendance.updateByDate(date, body);
+    showToast('Daily attendance saved! ✅', 'success');
+    await refreshAttendanceTable();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/* ── MARKS EDIT MODAL OPERATIONS ── */
+async function openEditMarkModal(id) {
+  try {
+    const marks = await api.marks.all();
+    const record = marks.find(m => m.id === id);
+    if (!record) return;
+
+    document.getElementById('editMarkId').value = record.id;
+    document.getElementById('editMarkStudentId').value = record.student_id;
+    document.getElementById('editMarkExamType').value = record.exam_type;
+    document.getElementById('editMarkExamName').value = record.exam_name;
+    document.getElementById('editMarkSubject').value = record.subject;
+    document.getElementById('editMarkScored').value = record.scored_marks;
+    document.getElementById('editMarkTotal').value = record.total_marks;
+
+    document.getElementById('editMarkModal').classList.add('active');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function closeEditMarkModal() {
+  document.getElementById('editMarkModal').classList.remove('active');
+}
+
+async function submitEditMark() {
+  const id = document.getElementById('editMarkId').value;
+  const student_id = document.getElementById('editMarkStudentId').value;
+  const exam_type = document.getElementById('editMarkExamType').value;
+  const exam_name = document.getElementById('editMarkExamName').value.trim();
+  const subject = document.getElementById('editMarkSubject').value.trim();
+  const scored_marks = parseFloat(document.getElementById('editMarkScored').value);
+  const total_marks = parseFloat(document.getElementById('editMarkTotal').value);
+
+  if (!exam_name || !subject || isNaN(scored_marks) || isNaN(total_marks)) {
+    showToast('Please fill all fields', 'warning');
+    return;
+  }
+  if (scored_marks > total_marks) {
+    showToast('Scored marks cannot exceed total marks', 'warning');
+    return;
+  }
+
+  try {
+    await api.marks.update(id, { student_id, exam_type, exam_name, subject, scored_marks, total_marks });
+    showToast('Marks updated successfully! ✅', 'success');
+    closeEditMarkModal();
+    await refreshMarksList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+/* ── INCHARGE NOTES MANAGER ── */
+async function loadNotesManager() {
+  await fetchStudents();
+  const container = document.getElementById('notesContent');
+  const approvedStudents = allStudents.filter(s => s.approved !== false);
+
+  container.innerHTML = `
+    <!-- Create/Edit Note Form -->
+    <div class="marks-form-card" id="noteFormCard">
+      <h3 id="noteFormTitle">📝 Create Note</h3>
+      
+      <input type="hidden" id="noteId" />
+      
+      <div class="form-group">
+        <label>Assign To</label>
+        <select id="noteStudentTarget" class="form-input" style="width:100%;">
+          <option value="all">🌐 All Students (Class note)</option>
+          ${approvedStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.roll_number})</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="noteTitle" class="form-input" placeholder="e.g. Exam Schedule" />
+      </div>
+
+      <div class="form-group">
+        <label>Content</label>
+        <textarea id="noteContentText" class="form-input" placeholder="Enter note details here..." rows="4" style="width:100%; font-family:var(--font-body); padding:10px; border-radius:var(--radius); border:1px solid var(--border);"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Color Tag</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input type="color" id="noteColor" value="#C89B3C" style="border:none; width:44px; height:44px; padding:0; border-radius:50%; cursor:pointer; background:none;" />
+          <span style="font-size:0.84rem; color:var(--text-2);">Click circle to select a custom color tag</span>
+        </div>
+      </div>
+
+      <div class="form-actions" style="display:flex; gap:12px; margin-top:20px;">
+        <button class="btn btn-primary" id="saveNoteBtn" onclick="saveInchargeNote()">💾 Create Note</button>
+        <button class="btn btn-secondary" id="cancelNoteBtn" onclick="resetNoteForm()" style="display:none;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Notes List -->
+    <div style="margin-top:30px;">
+      <div class="flex-between" style="margin-bottom:18px;">
+        <h3>📋 All Notes</h3>
+        <input type="text" class="search-input" placeholder="🔍 Search notes..." style="max-width:220px;" oninput="filterInchargeNotes(this.value)" />
+      </div>
+      <div id="inchargeNotesGrid" class="notes-grid">
+        <div class="loading-container"><div class="spinner"></div></div>
+      </div>
+    </div>
+  `;
+
+  await refreshInchargeNotesList();
+}
+
+async function refreshInchargeNotesList() {
+  const grid = document.getElementById('inchargeNotesGrid');
+  if (!grid) return;
+  try {
+    const notes = await api.notes.all();
+    const myNotes = notes.filter(n => n.author === 'incharge');
+    if (myNotes.length === 0) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">📝</div><h3>No notes created by incharge</h3></div>';
+      return;
+    }
+
+    grid.innerHTML = myNotes.map(n => `
+      <div class="note-card incharge-note-item" style="--note-color: ${n.color};" data-title="${n.title.toLowerCase()}" data-content="${n.content.toLowerCase()}">
+        <div class="note-title">${escapeHtml(n.title)}</div>
+        <div style="font-size:0.7rem; margin-bottom:8px;">
+          <span class="badge ${n.student_id === 'all' ? 'badge-primary' : 'badge-purple'}">
+            🎯 Target: ${escapeHtml(n.student_name)}
+          </span>
+        </div>
+        <div class="note-content">${escapeHtml(n.content) || '<em style="color:var(--text-3);">No content</em>'}</div>
+        <div class="note-footer">
+          <span class="note-date">📅 ${formatDate(n.updated_at)}</span>
+          <div class="note-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-icon btn-secondary" onclick="editInchargeNote('${n.id}')" title="Edit">✏️</button>
+            <button class="btn btn-icon btn-danger" onclick="deleteInchargeNote('${n.id}')" title="Delete">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>Error loading notes: ${err.message}</p></div>`;
+  }
+}
+
+function filterInchargeNotes(q) {
+  const query = q.toLowerCase();
+  document.querySelectorAll('.incharge-note-item').forEach(item => {
+    const match = item.dataset.title.includes(query) || item.dataset.content.includes(query);
+    item.style.display = match ? '' : 'none';
+  });
+}
+
+async function saveInchargeNote() {
+  const target = document.getElementById('noteStudentTarget').value;
+  const title = document.getElementById('noteTitle').value.trim();
+  const content = document.getElementById('noteContentText').value.trim();
+  const color = document.getElementById('noteColor').value;
+  const id = document.getElementById('noteId').value;
+
+  if (!title) {
+    showToast('Please enter a title', 'warning');
+    return;
+  }
+
+  try {
+    if (id) {
+      await api.notes.update(id, { title, content, color, student_id: target });
+      showToast('Note updated! ✅', 'success');
+    } else {
+      await api.notes.add({ student_id: target, title, content, color, author: 'incharge' });
+      showToast('Note created! ✅', 'success');
+    }
+    resetNoteForm();
+    await refreshInchargeNotesList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function editInchargeNote(id) {
+  try {
+    const notes = await api.notes.all();
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+
+    document.getElementById('noteId').value = note.id;
+    document.getElementById('noteStudentTarget').value = note.student_id;
+    document.getElementById('noteTitle').value = note.title;
+    document.getElementById('noteContentText').value = note.content;
+    document.getElementById('noteColor').value = note.color;
+
+    document.getElementById('noteFormTitle').textContent = '✏️ Edit Note';
+    document.getElementById('saveNoteBtn').textContent = '💾 Save Note';
+    document.getElementById('cancelNoteBtn').style.display = 'block';
+
+    document.getElementById('noteFormCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function resetNoteForm() {
+  document.getElementById('noteId').value = '';
+  document.getElementById('noteStudentTarget').value = 'all';
+  document.getElementById('noteTitle').value = '';
+  document.getElementById('noteContentText').value = '';
+  document.getElementById('noteColor').value = '#C89B3C';
+
+  document.getElementById('noteFormTitle').textContent = '📝 Create Note';
+  document.getElementById('saveNoteBtn').textContent = '💾 Create Note';
+  document.getElementById('cancelNoteBtn').style.display = 'none';
+}
+
+async function deleteInchargeNote(id) {
+  if (!confirm('Are you sure you want to delete this note?')) return;
+  try {
+    await api.notes.delete(id);
+    showToast('Note deleted successfully', 'info');
+    await refreshInchargeNotesList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }

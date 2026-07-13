@@ -16,6 +16,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 (async () => {
   try {
     await initializeDatabase();
+    // Run backward compatibility migration to set approved: true for pre-existing students
+    const studentsColl = getCollection('students');
+    await studentsColl.updateMany(
+      { approved: { $exists: false } },
+      { $set: { approved: true } }
+    );
+    console.log('✅ Checked database for student approval flag compatibility');
   } catch (err) {
     console.error('❌ Could not start database connection:', err);
     process.exit(1);
@@ -44,6 +51,7 @@ app.use(express.static(path.join(__dirname, 'public')));
           course,
           email,
           roll_number,
+          approved: false, // New students require incharge approval
           created_at: new Date().toISOString()
         };
         const r = await studentsColl.insertOne(newStudent);
@@ -55,13 +63,18 @@ app.use(express.static(path.join(__dirname, 'public')));
           { $setOnInsert: { student_id: student.id, days_present: 0, total_days: 0, updated_at: new Date().toISOString() } },
           { upsert: true }
         );
+        return res.json({ success: true, pendingApproval: true, student });
       } else {
+        if (student.approved === false) {
+          return res.status(403).json({ error: 'Your registration is still pending approval from the class incharge.', pendingApproval: true });
+        }
         student = {
           id: student._id.toString(),
           name: student.name,
           course: student.course,
           email: student.email,
           roll_number: student.roll_number,
+          approved: student.approved !== false,
           created_at: student.created_at
         };
       }
@@ -80,9 +93,65 @@ app.use(express.static(path.join(__dirname, 'public')));
         course: s.course,
         email: s.email,
         roll_number: s.roll_number,
+        approved: s.approved !== false,
         created_at: s.created_at
       }));
       res.json(mapped);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Approve student registration
+  app.put('/api/students/:id/approve', async (req, res) => {
+    try {
+      await getCollection('students').updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { approved: true } }
+      );
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Delete student and all associated records
+  app.delete('/api/students/:id', async (req, res) => {
+    try {
+      const studentId = req.params.id;
+      await getCollection('students').deleteOne({ _id: new ObjectId(studentId) });
+      await getCollection('attendance').deleteMany({ student_id: studentId });
+      await getCollection('daily_attendance').deleteMany({ student_id: studentId });
+      await getCollection('marks').deleteMany({ student_id: studentId });
+      await getCollection('assignment_completions').deleteMany({ student_id: studentId });
+      await getCollection('notes').deleteMany({ student_id: studentId });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Update student profile details (editable from student portal)
+  app.put('/api/students/:id', async (req, res) => {
+    const { name, email, course } = req.body;
+    if (!name || !email || !course)
+      return res.status(400).json({ error: 'Name, email, and course are required.' });
+    try {
+      const studentsColl = getCollection('students');
+      
+      const existingEmail = await studentsColl.findOne({
+        email,
+        _id: { $ne: new ObjectId(req.params.id) }
+      });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'This email is already registered by another student.' });
+      }
+
+      await studentsColl.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { name, email, course } }
+      );
+      res.json({ success: true, updated: { name, email, course } });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -423,6 +492,70 @@ app.use(express.static(path.join(__dirname, 'public')));
     }
   });
 
+  // Daily calendar attendance getters and setters
+  app.get('/api/attendance/date/:date', async (req, res) => {
+    const date = req.params.date;
+    try {
+      const records = await getCollection('daily_attendance').find({ date }).toArray();
+      res.json(records.map(r => ({
+        student_id: r.student_id,
+        status: r.status
+      })));
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/attendance/date/:date', async (req, res) => {
+    const date = req.params.date;
+    const { attendance } = req.body;
+    if (!attendance || !Array.isArray(attendance)) {
+      return res.status(400).json({ error: 'Attendance array is required' });
+    }
+    try {
+      const dailyColl = getCollection('daily_attendance');
+      const cumulativeColl = getCollection('attendance');
+
+      for (const item of attendance) {
+        const { student_id, status } = item;
+        const existing = await dailyColl.findOne({ date, student_id });
+        if (existing) {
+          if (existing.status !== status) {
+            await dailyColl.updateOne({ _id: existing._id }, { $set: { status } });
+            const diffPresent = status === 'present' ? 1 : -1;
+            await cumulativeColl.updateOne(
+              { student_id },
+              { 
+                $inc: { days_present: diffPresent },
+                $set: { updated_at: new Date().toISOString() }
+              },
+              { upsert: true }
+            );
+          }
+        } else {
+          await dailyColl.insertOne({ date, student_id, status });
+          const incData = { total_days: 1 };
+          if (status === 'present') {
+            incData.days_present = 1;
+          } else {
+            incData.days_present = 0;
+          }
+          await cumulativeColl.updateOne(
+            { student_id },
+            { 
+              $inc: incData,
+              $set: { updated_at: new Date().toISOString() }
+            },
+            { upsert: true }
+          );
+        }
+      }
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ═══════════════════════════════════════
   //  MARKS ROUTES
   // ═══════════════════════════════════════
@@ -532,12 +665,80 @@ app.use(express.static(path.join(__dirname, 'public')));
     }
   });
 
+  app.put('/api/marks/:id', async (req, res) => {
+    const { student_id, exam_type, exam_name, subject, scored_marks, total_marks } = req.body;
+    if (!student_id || !exam_type || !exam_name || !subject || scored_marks === undefined || !total_marks)
+      return res.status(400).json({ error: 'All fields required' });
+    try {
+      const updateData = {
+        student_id: String(student_id),
+        exam_type,
+        exam_name,
+        subject,
+        scored_marks: parseFloat(scored_marks),
+        total_marks: parseFloat(total_marks),
+        updated_at: new Date().toISOString()
+      };
+      await getCollection('marks').updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: updateData }
+      );
+      res.json({ id: req.params.id, ...updateData });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ═══════════════════════════════════════
   //  NOTES ROUTES
   // ═══════════════════════════════════════
+  app.get('/api/notes', async (req, res) => {
+    try {
+      const notes = await getCollection('notes').find({}).toArray();
+      const studentsColl = getCollection('students');
+      const mapped = await Promise.all(notes.map(async (n) => {
+        let student = null;
+        if (n.student_id !== 'all') {
+          try {
+            student = await studentsColl.findOne({ _id: new ObjectId(n.student_id) });
+          } catch (_) {
+            student = await studentsColl.findOne({ id: n.student_id }) || await studentsColl.findOne({ roll_number: n.student_id });
+          }
+        }
+        return {
+          id: n._id.toString(),
+          student_id: n.student_id,
+          title: n.title,
+          content: n.content,
+          color: n.color,
+          created_at: n.created_at,
+          updated_at: n.updated_at,
+          author: n.author || 'student',
+          student_name: student ? student.name : (n.student_id === 'all' ? 'All Students' : 'Unknown')
+        };
+      }));
+      mapped.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+      res.json(mapped);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   app.get('/api/notes/:studentId', async (req, res) => {
     try {
-      const notes = await getCollection('notes').find({ student_id: req.params.studentId }).toArray();
+      const studentId = req.params.studentId;
+      let query;
+      if (studentId === 'all') {
+        query = { student_id: 'all' };
+      } else {
+        query = {
+          $or: [
+            { student_id: studentId },
+            { student_id: 'all' }
+          ]
+        };
+      }
+      const notes = await getCollection('notes').find(query).toArray();
       const mapped = notes.map(n => ({
         id: n._id.toString(),
         student_id: n.student_id,
@@ -545,7 +746,8 @@ app.use(express.static(path.join(__dirname, 'public')));
         content: n.content,
         color: n.color,
         created_at: n.created_at,
-        updated_at: n.updated_at
+        updated_at: n.updated_at,
+        author: n.author || 'student'
       }));
       mapped.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
       res.json(mapped);
@@ -555,7 +757,7 @@ app.use(express.static(path.join(__dirname, 'public')));
   });
 
   app.post('/api/notes', async (req, res) => {
-    const { student_id, title, content, color } = req.body;
+    const { student_id, title, content, color, author } = req.body;
     if (!student_id || !title) return res.status(400).json({ error: 'Student ID and title required' });
     try {
       const newNote = {
@@ -563,6 +765,7 @@ app.use(express.static(path.join(__dirname, 'public')));
         title,
         content: content || '',
         color: color || '#6366f1',
+        author: author || 'student',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -679,7 +882,7 @@ app.use(express.static(path.join(__dirname, 'public')));
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    const groqKey = process.env.GROQ_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY || process.env.GROG_API_KEY;
     if (!groqKey) {
       return res.status(500).json({ error: 'Groq API Key is not configured on the server.' });
     }

@@ -56,6 +56,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (overlay) {
     overlay.addEventListener('click', closeSidebar);
   }
+
+  // Dark mode switch handler
+  const darkToggle = document.getElementById('darkToggle');
+  const darkToggleSw = document.getElementById('darkToggleSw');
+  if (darkToggle && darkToggleSw) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    darkToggleSw.classList.toggle('on', isDark);
+
+    darkToggle.addEventListener('click', () => {
+      const turnDark = !darkToggleSw.classList.contains('on');
+      darkToggleSw.classList.toggle('on', turnDark);
+      applyDarkMode(turnDark);
+      showToast(turnDark ? 'Dark Mode Enabled 🌙' : 'Light Mode Enabled ☀️', 'success');
+    });
+  }
 });
 
 function closeSidebar() {
@@ -90,6 +105,7 @@ async function loadSection(section) {
     attendance:  { title: 'Attendance',     sub: 'Your attendance record 📊' },
     marks:       { title: 'Marks',          sub: 'Your academic performance 🎓' },
     analytics:   { title: 'Analytics',      sub: 'Performance insights 📈' },
+    quiz:        { title: 'AI Quiz Generator', sub: 'Practice quizzes powered by AI 🧠' },
     ai:          { title: 'AI Assistant',   sub: 'Your 24/7 study buddy 🤖' },
     profile:     { title: 'My Profile',     sub: 'Your account details 👤' },
   };
@@ -108,6 +124,7 @@ async function loadSection(section) {
     attendance:  loadAttendance,
     marks:       loadMarks,
     analytics:   loadAnalytics,
+    quiz:        restartQuizGenerator,
     ai:          initAIAssistant,
     profile:     loadProfile,
   };
@@ -149,6 +166,40 @@ async function loadDashboard() {
     // Notes count
     const notes = await api.notes.get(currentStudent.id);
     if (notEl) notEl.textContent = notes.length;
+
+    // Render Assignment Reminders
+    const remindersArea = document.getElementById('assignmentRemindersArea');
+    if (remindersArea) {
+      const reminderAssignments = assignments.filter(a => !a.is_completed && (isOverdue(a.due_date) || isDueSoon(a.due_date)));
+      if (reminderAssignments.length > 0) {
+        remindersArea.style.display = 'block';
+        remindersArea.innerHTML = `
+          <div class="pending-approvals-card" style="background:var(--red-bg); border:1px solid rgba(220,38,38,0.15); padding:20px; border-radius:var(--radius-lg);">
+            <h3 style="color:var(--red); margin-bottom:10px; display:flex; align-items:center; gap:8px;">⚠️ Assignment Reminders (${reminderAssignments.length})</h3>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              ${reminderAssignments.map(a => {
+                const overdue = isOverdue(a.due_date);
+                const badgeText = overdue ? 'Overdue!' : 'Due Soon!';
+                const badgeClass = overdue ? 'badge-danger' : 'badge-warning';
+                return `
+                  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background:var(--bg-card); padding:12px 16px; border-radius:var(--radius); border:1px solid var(--border);">
+                    <div>
+                      <strong style="color:var(--navy);">${escapeHtml(a.subject)}</strong>
+                      <div style="font-size:0.75rem; color:var(--text-2); margin-top:2px;">
+                        📅 Due: ${formatDate(a.due_date)} • <span class="badge ${badgeClass}">${badgeText}</span>
+                      </div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="toggleAssignment('${a.id}', true)">Mark Done</button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        remindersArea.style.display = 'none';
+      }
+    }
 
     // Upcoming assignments
     const upcoming  = assignments.filter(a => !a.is_completed).slice(0, 3);
@@ -274,10 +325,13 @@ function renderNotes(notes) {
           <div class="note-content">${escapeHtml(n.content) || '<em style="color:var(--text-3);">No content</em>'}</div>
           <div class="note-footer">
             <span class="note-date">📅 ${formatDate(n.updated_at)}</span>
-            <div class="note-actions" onclick="event.stopPropagation()">
-              <button class="btn btn-icon btn-secondary" onclick="openNoteModal('${n.id}')" title="Edit">✏️</button>
-              <button class="btn btn-icon btn-danger" onclick="deleteNote(${n.id})" title="Delete">🗑️</button>
-            </div>
+            ${n.author === 'incharge'
+              ? `<span class="badge badge-purple" style="font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius: var(--radius-pill); background: var(--gold-pale); color: var(--gold); border: 1px solid var(--gold-pale);">📢 Incharge Note</span>`
+              : `<div class="note-actions" onclick="event.stopPropagation()">
+                  <button class="btn btn-icon btn-secondary" onclick="openNoteModal('${n.id}')" title="Edit">✏️</button>
+                  <button class="btn btn-icon btn-danger" onclick="deleteNote('${n.id}')" title="Delete">🗑️</button>
+                </div>`
+            }
           </div>
         </div>
       `).join('')}
@@ -288,9 +342,32 @@ function renderNotes(notes) {
 function openNewNoteModal() {
   currentNoteEdit = null;
   document.getElementById('noteModalTitle').textContent = 'New Note';
-  document.getElementById('noteTitle').value   = '';
-  document.getElementById('noteContent').value = '';
-  document.getElementById('noteColor').value   = '#C89B3C';
+  
+  const titleInput = document.getElementById('noteTitle');
+  const contentInput = document.getElementById('noteContent');
+  const colorInput = document.getElementById('noteColor');
+  const saveBtn = document.getElementById('saveNoteBtn');
+  const cancelBtn = document.getElementById('cancelNoteBtn');
+
+  if (titleInput) {
+    titleInput.value = '';
+    titleInput.readOnly = false;
+  }
+  if (contentInput) {
+    contentInput.value = '';
+    contentInput.readOnly = false;
+  }
+  if (colorInput) {
+    colorInput.value = '#C89B3C';
+    colorInput.disabled = false;
+  }
+  if (saveBtn) {
+    saveBtn.style.display = 'inline-flex';
+  }
+  if (cancelBtn) {
+    cancelBtn.textContent = 'Cancel';
+  }
+  
   document.getElementById('noteModal').classList.add('active');
 }
 
@@ -300,10 +377,35 @@ async function openNoteModal(id) {
     const note  = notes.find(n => String(n.id) === String(id));
     if (!note) return;
     currentNoteEdit = note;
-    document.getElementById('noteModalTitle').textContent = 'Edit Note';
-    document.getElementById('noteTitle').value   = note.title;
-    document.getElementById('noteContent').value = note.content;
-    document.getElementById('noteColor').value   = note.color;
+    
+    const isInchargeNote = (note.author === 'incharge');
+    document.getElementById('noteModalTitle').textContent = isInchargeNote ? '👁️ View Incharge Note' : 'Edit Note';
+    
+    const titleInput = document.getElementById('noteTitle');
+    const contentInput = document.getElementById('noteContent');
+    const colorInput = document.getElementById('noteColor');
+    const saveBtn = document.getElementById('saveNoteBtn');
+    const cancelBtn = document.getElementById('cancelNoteBtn');
+
+    if (titleInput) {
+      titleInput.value = note.title;
+      titleInput.readOnly = isInchargeNote;
+    }
+    if (contentInput) {
+      contentInput.value = note.content;
+      contentInput.readOnly = isInchargeNote;
+    }
+    if (colorInput) {
+      colorInput.value = note.color;
+      colorInput.disabled = isInchargeNote;
+    }
+    if (saveBtn) {
+      saveBtn.style.display = isInchargeNote ? 'none' : 'inline-flex';
+    }
+    if (cancelBtn) {
+      cancelBtn.textContent = isInchargeNote ? 'Close' : 'Cancel';
+    }
+    
     document.getElementById('noteModal').classList.add('active');
   } catch {}
 }
@@ -392,8 +494,8 @@ function renderAssignments(assignments) {
             </div>
             <div style="flex-shrink:0;">
               ${a.is_completed
-                ? `<button class="btn btn-secondary btn-sm" onclick="toggleAssignment(${a.id}, false)">↩️ Undo</button>`
-                : `<button class="btn btn-success btn-sm" onclick="toggleAssignment(${a.id}, true)">✅ Done</button>`
+                ? `<button class="btn btn-secondary btn-sm" onclick="toggleAssignment('${a.id}', false)">↩️ Undo</button>`
+                : `<button class="btn btn-success btn-sm" onclick="toggleAssignment('${a.id}', true)">✅ Done</button>`
               }
             </div>
           </div>
@@ -515,49 +617,98 @@ async function loadMarks() {
     const sem = marks.filter(m => m.exam_type === 'sem');
     const cat = marks.filter(m => m.exam_type === 'cat');
 
+    // Summary stats
+    const totalScored = marks.reduce((s, m) => s + m.scored_marks, 0);
+    const totalMax    = marks.reduce((s, m) => s + m.total_marks, 0);
+    const overallPct  = totalMax > 0 ? Math.round(totalScored / totalMax * 100) : 0;
+    const overallGrade = overallPct >= 90 ? 'O' : overallPct >= 80 ? 'A+' : overallPct >= 70 ? 'A'
+                       : overallPct >= 60 ? 'B+' : overallPct >= 50 ? 'B' : overallPct >= 40 ? 'C' : 'F';
+    const gc = overallPct >= 75 ? 'success' : overallPct >= 50 ? 'warning' : 'danger';
+
     container.innerHTML = `
-      <div class="marks-tabs">
-        <button class="marks-tab active" onclick="switchMarksTab('all', this)">All (${marks.length})</button>
-        <button class="marks-tab" onclick="switchMarksTab('sem', this)">Sem Exams (${sem.length})</button>
-        <button class="marks-tab" onclick="switchMarksTab('cat', this)">CAT / Mid (${cat.length})</button>
+      <!-- Overall Summary Card -->
+      <div class="card" style="padding:20px; margin-bottom:24px; background:var(--bg-card);">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+          <div>
+            <div style="font-size:0.8rem; color:var(--text-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Overall Performance</div>
+            <div style="font-size:2rem; font-weight:800; color:var(--navy);">${overallPct}%</div>
+            <div style="font-size:0.85rem; color:var(--text-2);">${totalScored} / ${totalMax} marks across ${marks.length} subject${marks.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:72px; height:72px; border-radius:50%; background:var(--${gc === 'success' ? 'green' : gc === 'warning' ? 'amber' : 'red'}-bg); border:3px solid var(--${gc === 'success' ? 'green' : gc === 'warning' ? 'amber' : 'red'});">
+            <span style="font-size:1.5rem; font-weight:800; color:var(--${gc === 'success' ? 'green' : gc === 'warning' ? 'amber' : 'red'});">${overallGrade}</span>
+          </div>
+          <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <div style="text-align:center;">
+              <div style="font-size:1.3rem; font-weight:700; color:var(--navy);">${sem.length}</div>
+              <div style="font-size:0.75rem; color:var(--text-2);">Sem Subjects</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:1.3rem; font-weight:700; color:var(--navy);">${cat.length}</div>
+              <div style="font-size:0.75rem; color:var(--text-2);">CAT Subjects</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px;">
+          <div style="height:8px; border-radius:99px; background:var(--border); overflow:hidden;">
+            <div style="height:100%; width:${overallPct}%; background:${overallPct >= 75 ? 'var(--green)' : overallPct >= 50 ? 'var(--amber)' : 'var(--red)'}; border-radius:99px; transition:width 0.8s ease;"></div>
+          </div>
+        </div>
       </div>
-      <div id="marksTableAll">${renderMarksTable(marks)}</div>
-      <div id="marksTableSem" style="display:none;">${renderMarksTable(sem)}</div>
-      <div id="marksTableCat" style="display:none;">${renderMarksTable(cat)}</div>
+
+      <!-- Tabs -->
+      <div class="marks-tabs" style="margin-bottom:20px;">
+        <button class="marks-tab active" onclick="switchMarksTab('all', this)">All (${marks.length})</button>
+        <button class="marks-tab" onclick="switchMarksTab('sem', this)">📚 Semester (${sem.length})</button>
+        <button class="marks-tab" onclick="switchMarksTab('cat', this)">📝 CAT / Mid (${cat.length})</button>
+      </div>
+
+      <div id="marksTableAll">${renderMarksGrouped(marks)}</div>
+      <div id="marksTableSem" style="display:none;">${renderMarksGrouped(sem)}</div>
+      <div id="marksTableCat" style="display:none;">${renderMarksGrouped(cat)}</div>
     `;
   } catch {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><h3>Error loading marks</h3></div>';
   }
 }
 
-function renderMarksTable(marks) {
+function renderMarksGrouped(marks) {
   if (marks.length === 0) return '<div class="empty-state" style="padding:40px;"><div class="empty-state-icon">📋</div><h3>No records</h3></div>';
-  return `
-    <div class="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Type</th>
-            <th>Exam Name</th>
-            <th>Subject</th>
-            <th>Scored</th>
-            <th>Total</th>
-            <th>Percentage</th>
-            <th>Grade</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${marks.map((m, i) => {
-            const pct   = Math.round((m.scored_marks / m.total_marks) * 100);
-            const grade = pct >= 90 ? 'O' : pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B+' : pct >= 50 ? 'B' : pct >= 40 ? 'C' : 'F';
-            const gc    = pct >= 75 ? 'success' : pct >= 50 ? 'warning' : 'danger';
-            return `
+
+  // Group by exam name
+  const exams = {};
+  marks.forEach(m => {
+    const key = `${m.exam_type}||${m.exam_name}`;
+    if (!exams[key]) exams[key] = { exam_name: m.exam_name, exam_type: m.exam_type, subjects: [] };
+    exams[key].subjects.push(m);
+  });
+
+  return Object.values(exams).map(exam => {
+    const totalScored = exam.subjects.reduce((s, m) => s + m.scored_marks, 0);
+    const totalMax    = exam.subjects.reduce((s, m) => s + m.total_marks, 0);
+    const examPct     = totalMax > 0 ? Math.round(totalScored / totalMax * 100) : 0;
+    const examGc      = examPct >= 75 ? 'success' : examPct >= 50 ? 'warning' : 'danger';
+    const examGrade   = examPct >= 90 ? 'O' : examPct >= 80 ? 'A+' : examPct >= 70 ? 'A'
+                      : examPct >= 60 ? 'B+' : examPct >= 50 ? 'B' : examPct >= 40 ? 'C' : 'F';
+
+    return `
+      <div class="marks-student-group" style="margin-bottom:24px;">
+        <!-- Exam Header -->
+        <div class="marks-student-header" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span class="badge ${exam.exam_type === 'sem' ? 'badge-primary' : 'badge-purple'}" style="font-size:0.8rem;">
+            ${exam.exam_type === 'sem' ? '📚 Semester Exam' : '📝 CAT / Mid Exam'}
+          </span>
+          <span style="font-weight:700; color:var(--navy); font-size:1rem;">${escapeHtml(exam.exam_name)}</span>
+          <span style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:0.8rem; color:var(--text-2);">${exam.subjects.length} subject${exam.subjects.length !== 1 ? 's' : ''}</span>
+            <span class="badge badge-${examGc}">${examPct}% • ${examGrade}</span>
+          </span>
+        </div>
+
+        <!-- Subjects Table -->
+        <div class="table-wrapper" style="border-top:none; border-radius:0 0 var(--radius) var(--radius);">
+          <table>
+            <thead>
               <tr>
-                <td>${i + 1}</td>
-                <td><span class="badge ${m.exam_type === 'sem' ? 'badge-primary' : 'badge-purple'}">${m.exam_type === 'sem' ? 'Sem' : 'CAT'}</span></td>
-                <td>${escapeHtml(m.exam_name)}</td>
-                <td><strong>${escapeHtml(m.subject)}</strong></td>
                 <td>${m.scored_marks}</td>
                 <td>${m.total_marks}</td>
                 <td>
@@ -728,6 +879,60 @@ function loadProfile() {
   set('profileFieldRoll',   s.roll_number);
   set('profileFieldCourse', s.course);
   set('profileFieldJoined', formatDate(s.created_at));
+
+  // Populate edit fields
+  const nameInput = document.getElementById('editProfileName');
+  const emailInput = document.getElementById('editProfileEmail');
+  const rollInput = document.getElementById('editProfileRoll');
+  const courseInput = document.getElementById('editProfileCourse');
+  if (nameInput) nameInput.value = s.name;
+  if (emailInput) emailInput.value = s.email;
+  if (rollInput) rollInput.value = s.roll_number;
+  if (courseInput) courseInput.value = s.course;
+}
+
+function toggleProfileEdit(showEdit) {
+  const viewMode = document.getElementById('profileViewMode');
+  const editMode = document.getElementById('profileEditMode');
+  if (viewMode && editMode) {
+    viewMode.style.display = showEdit ? 'none' : 'block';
+    editMode.style.display = showEdit ? 'block' : 'none';
+  }
+}
+
+async function saveProfileDetails() {
+  const name = document.getElementById('editProfileName').value.trim();
+  const email = document.getElementById('editProfileEmail').value.trim();
+  const course = document.getElementById('editProfileCourse').value.trim();
+
+  if (!name || !email || !course) {
+    showToast('All profile fields are required', 'warning');
+    return;
+  }
+
+  try {
+    const res = await api.student.update(currentStudent.id, { name, email, course });
+    if (res.success) {
+      currentStudent.name = name;
+      currentStudent.email = email;
+      currentStudent.course = course;
+      localStorage.setItem('currentStudent', JSON.stringify(currentStudent));
+
+      loadProfile();
+      toggleProfileEdit(false);
+      showToast('Profile updated successfully! ✅', 'success');
+
+      // Update student details inside sidebar
+      const navUser = document.querySelector('.sidebar-user-name');
+      const navCourse = document.querySelector('.sidebar-user-course');
+      const navAvatar = document.querySelector('.sidebar-avatar');
+      if (navUser) navUser.textContent = name;
+      if (navCourse) navCourse.textContent = course;
+      if (navAvatar) navAvatar.textContent = getInitials(name);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // ═══════════════════════════════════════
@@ -741,4 +946,230 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/* ── AI PRACTICE QUIZ GENERATOR ── */
+let currentQuiz = null;
+let currentQuizIndex = 0;
+let quizScore = 0;
+let selectedQuizOption = null;
+
+function restartQuizGenerator() {
+  currentQuiz = null;
+  currentQuizIndex = 0;
+  quizScore = 0;
+  selectedQuizOption = null;
+
+  const formCard = document.getElementById('quizGeneratorFormCard');
+  const playCard = document.getElementById('quizPlayCard');
+  const resultsCard = document.getElementById('quizResultsCard');
+  const topicInput = document.getElementById('quizTopic');
+
+  if (formCard) formCard.style.display = 'block';
+  if (playCard) playCard.style.display = 'none';
+  if (resultsCard) resultsCard.style.display = 'none';
+  if (topicInput) topicInput.value = '';
+
+  const generateBtn = document.getElementById('quizGenerateBtn');
+  if (generateBtn) {
+    generateBtn.disabled = false;
+    generateBtn.textContent = '⚡ Generate Quiz via AI';
+  }
+}
+
+async function generateQuiz() {
+  const topic = document.getElementById('quizTopic').value.trim();
+  const numQuestions = parseInt(document.getElementById('quizNumQuestions').value) || 10;
+  const difficulty = document.getElementById('quizDifficulty').value;
+  const generateBtn = document.getElementById('quizGenerateBtn');
+
+  if (!topic) {
+    showToast('Please enter a topic or subject', 'warning');
+    return;
+  }
+
+  if (generateBtn) {
+    generateBtn.disabled = true;
+    generateBtn.textContent = '🧠 Generating questions via AI... Please wait...';
+  }
+
+  try {
+    const prompt = `You are QuizBot AI, a professional practice test generator.
+Create a multiple choice quiz on the topic: "${topic}".
+Difficulty level: ${difficulty}.
+Number of questions: ${numQuestions}.
+
+Return ONLY a valid JSON object matching this structure:
+{
+  "title": "Quiz Title",
+  "questions": [
+    {
+      "question": "Question text?",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "answer": 0 // 0-based index of the correct answer
+    }
+  ]
+}
+
+Strict requirements:
+1. Return ONLY the JSON object. Do not wrap it in markdown code blocks like \`\`\`json. Do not include introductory or concluding conversational text.
+2. The correct answer index must map accurately to one of the provided options.`;
+
+    const chatResponse = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!chatResponse.ok) {
+      throw new Error('Server-side AI request failed');
+    }
+
+    const data = await chatResponse.json();
+    let reply = data.choices[0]?.message?.content || '';
+
+    // Clean up potential markdown wrapped responses
+    reply = reply.trim();
+    if (reply.startsWith('```json')) {
+      reply = reply.substring(7);
+    }
+    if (reply.endsWith('```')) {
+      reply = reply.substring(0, reply.length - 3);
+    }
+    reply = reply.trim();
+
+    const quizData = JSON.parse(reply);
+    if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length === 0) {
+      throw new Error('Invalid quiz format received from AI');
+    }
+
+    currentQuiz = quizData;
+    currentQuizIndex = 0;
+    quizScore = 0;
+    selectedQuizOption = null;
+
+    // Transition UI
+    const formCard = document.getElementById('quizGeneratorFormCard');
+    const playCard = document.getElementById('quizPlayCard');
+    if (formCard) formCard.style.display = 'none';
+    if (playCard) playCard.style.display = 'block';
+
+    const titleDisp = document.getElementById('quizTitleDisplay');
+    const metaDisp = document.getElementById('quizMetaDisplay');
+    if (titleDisp) titleDisp.textContent = currentQuiz.title || `${topic} Practice Quiz`;
+    if (metaDisp) metaDisp.textContent = `${difficulty} • ${currentQuiz.questions.length} Qs`;
+
+    showQuizQuestion();
+  } catch (err) {
+    showToast('Failed to generate quiz: ' + err.message, 'error');
+    if (generateBtn) {
+      generateBtn.disabled = false;
+      generateBtn.textContent = '⚡ Generate Quiz via AI';
+    }
+  }
+}
+
+function showQuizQuestion() {
+  if (!currentQuiz || currentQuizIndex >= currentQuiz.questions.length) return;
+
+  selectedQuizOption = null;
+  const q = currentQuiz.questions[currentQuizIndex];
+  
+  const progText = document.getElementById('quizScoreProgress');
+  if (progText) progText.textContent = `Question ${currentQuizIndex + 1} of ${currentQuiz.questions.length}`;
+
+  const qText = document.getElementById('quizQuestionText');
+  if (qText) qText.textContent = `${currentQuizIndex + 1}. ${escapeHtml(q.question)}`;
+
+  const optContainer = document.getElementById('quizOptionsContainer');
+  if (optContainer) {
+    optContainer.innerHTML = q.options.map((opt, idx) => `
+      <button class="btn btn-secondary" onclick="selectQuizOption(${idx}, this)" style="text-align:left; justify-content:flex-start; padding:12px 18px; width:100%; border:1px solid var(--border); background:var(--bg-card); color:var(--text-1); font-weight:500;">
+        <span style="font-weight:700; color:var(--gold); margin-right:12px;">${String.fromCharCode(65 + idx)}.</span>
+        ${escapeHtml(opt)}
+      </button>
+    `).join('');
+  }
+
+  const nextBtn = document.getElementById('quizNextBtn');
+  if (nextBtn) {
+    nextBtn.disabled = true;
+    nextBtn.textContent = currentQuizIndex === currentQuiz.questions.length - 1 ? 'Show Results 🏆' : 'Next Question ➡️';
+  }
+}
+
+function selectQuizOption(index, buttonEl) {
+  if (selectedQuizOption !== null) return; // Prevent double-clicking answers
+  selectedQuizOption = index;
+
+  const q = currentQuiz.questions[currentQuizIndex];
+  const isCorrect = (index === q.answer);
+
+  if (isCorrect) {
+    quizScore++;
+    showToast('Correct answer! 🎉', 'success');
+  } else {
+    showToast('Incorrect answer', 'error');
+  }
+
+  const buttons = document.getElementById('quizOptionsContainer').querySelectorAll('button');
+  buttons.forEach((btn, idx) => {
+    btn.disabled = true;
+    if (idx === q.answer) {
+      btn.style.borderColor = 'var(--green)';
+      btn.style.background = 'rgba(22, 163, 74, 0.15)';
+      btn.style.color = 'var(--green)';
+    } else if (idx === index) {
+      btn.style.borderColor = 'var(--red)';
+      btn.style.background = 'rgba(220, 38, 38, 0.15)';
+      btn.style.color = 'var(--red)';
+    }
+  });
+
+  const nextBtn = document.getElementById('quizNextBtn');
+  if (nextBtn) nextBtn.disabled = false;
+}
+
+function nextQuizQuestion() {
+  currentQuizIndex++;
+  if (currentQuizIndex >= currentQuiz.questions.length) {
+    showQuizResults();
+  } else {
+    showQuizQuestion();
+  }
+}
+
+function showQuizResults() {
+  const playCard = document.getElementById('quizPlayCard');
+  const resultsCard = document.getElementById('quizResultsCard');
+  if (playCard) playCard.style.display = 'none';
+  if (resultsCard) resultsCard.style.display = 'block';
+
+  const scoreText = document.getElementById('quizScoreText');
+  if (scoreText) scoreText.textContent = `You scored ${quizScore} out of ${currentQuiz.questions.length} (${Math.round(quizScore / currentQuiz.questions.length * 100)}%)`;
+
+  const feedback = document.getElementById('quizScoreFeedback');
+  if (feedback) {
+    const pct = quizScore / currentQuiz.questions.length;
+    if (pct >= 0.8) {
+      feedback.textContent = 'Excellent job! You have mastered this topic! 🌟';
+      feedback.style.color = 'var(--green)';
+    } else if (pct >= 0.5) {
+      feedback.textContent = 'Good try! Review and practice again to score higher. 👍';
+      feedback.style.color = 'var(--amber)';
+    } else {
+      feedback.textContent = 'Keep practicing! Focus on review study notes and try again. 💪';
+      feedback.style.color = 'var(--red)';
+    }
+  }
+}
+
+function exitQuiz() {
+  restartQuizGenerator();
+  loadSection('dashboard');
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.section === 'dashboard');
+  });
 }

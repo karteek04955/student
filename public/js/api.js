@@ -27,6 +27,15 @@ const api = {
     list: async () => {
       return await apiFetch('/api/students');
     },
+    approve: async (id) => {
+      return await apiFetch(`/api/students/${id}/approve`, { method: 'PUT' });
+    },
+    delete: async (id) => {
+      return await apiFetch(`/api/students/${id}`, { method: 'DELETE' });
+    },
+    update: async (id, body) => {
+      return await apiFetch(`/api/students/${id}`, { method: 'PUT', body });
+    },
   },
   incharge: {
     login: async (body) => {
@@ -80,6 +89,12 @@ const api = {
     update: async (studentId, body) => {
       return await apiFetch(`/api/attendance/${studentId}`, { method: 'PUT', body });
     },
+    getByDate: async (date) => {
+      return await apiFetch(`/api/attendance/date/${date}`);
+    },
+    updateByDate: async (date, body) => {
+      return await apiFetch(`/api/attendance/date/${date}`, { method: 'POST', body: { attendance: body } });
+    },
   },
   marks: {
     forStudent: async (studentId) => {
@@ -94,8 +109,14 @@ const api = {
     delete: async (id) => {
       return await apiFetch(`/api/marks/${id}`, { method: 'DELETE' });
     },
+    update: async (id, body) => {
+      return await apiFetch(`/api/marks/${id}`, { method: 'PUT', body });
+    },
   },
   notes: {
+    all: async () => {
+      return await apiFetch('/api/notes');
+    },
     get: async (studentId) => {
       return await apiFetch(`/api/notes/${studentId}`);
     },
@@ -138,17 +159,19 @@ function createToastContainer() {
   return el;
 }
 
-// Dark mode utility
+// Dark mode utility (Disabled - Force Light mode)
 function applyDarkMode(isDark) {
-  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  localStorage.setItem('darkMode', isDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', 'light');
+  localStorage.setItem('darkMode', 'light');
 }
 
 function loadDarkMode() {
-  const mode = localStorage.getItem('darkMode') || 'dark';
-  applyDarkMode(mode === 'dark');
-  return mode === 'dark';
+  applyDarkMode(false);
+  return false;
 }
+
+// Auto-run theme loaders
+loadDarkMode();
 
 // Format date utility
 function formatDate(dateStr) {
