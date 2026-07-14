@@ -436,63 +436,8 @@ app.use(express.static(path.join(__dirname, 'public')));
     }
   });
 
-  app.get('/api/attendance/:studentId', async (req, res) => {
-    const studentId = req.params.studentId;
-    try {
-      const attendanceColl = getCollection('attendance');
-      let att = await attendanceColl.findOne({ student_id: studentId });
-      if (!att) {
-        const newAtt = {
-          student_id: studentId,
-          days_present: 0,
-          total_days: 0,
-          updated_at: new Date().toISOString()
-        };
-        await attendanceColl.insertOne(newAtt);
-        att = newAtt;
-      }
-      res.json({
-        id: att._id ? att._id.toString() : null,
-        student_id: att.student_id,
-        days_present: att.days_present,
-        total_days: att.total_days,
-        updated_at: att.updated_at
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
 
-  app.put('/api/attendance/:studentId', async (req, res) => {
-    const studentId = req.params.studentId;
-    const { days_present, total_days } = req.body;
-    try {
-      const updateData = {
-        days_present: parseInt(days_present),
-        total_days: parseInt(total_days),
-        updated_at: new Date().toISOString()
-      };
-
-      await getCollection('attendance').updateOne(
-        { student_id: studentId },
-        { $set: updateData },
-        { upsert: true }
-      );
-
-      const record = await getCollection('attendance').findOne({ student_id: studentId });
-      res.json({
-        id: record._id.toString(),
-        student_id: record.student_id,
-        days_present: record.days_present,
-        total_days: record.total_days,
-        updated_at: record.updated_at
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Daily calendar attendance getters and setters
+  // Daily calendar attendance — MUST come BEFORE /:studentId to avoid route shadowing
   app.get('/api/attendance/date/:date', async (req, res) => {
     const date = req.params.date;
     try {
@@ -525,27 +470,16 @@ app.use(express.static(path.join(__dirname, 'public')));
             const diffPresent = status === 'present' ? 1 : -1;
             await cumulativeColl.updateOne(
               { student_id },
-              { 
-                $inc: { days_present: diffPresent },
-                $set: { updated_at: new Date().toISOString() }
-              },
+              { $inc: { days_present: diffPresent }, $set: { updated_at: new Date().toISOString() } },
               { upsert: true }
             );
           }
         } else {
           await dailyColl.insertOne({ date, student_id, status });
-          const incData = { total_days: 1 };
-          if (status === 'present') {
-            incData.days_present = 1;
-          } else {
-            incData.days_present = 0;
-          }
+          const incData = { total_days: 1, ...(status === 'present' ? { days_present: 1 } : {}) };
           await cumulativeColl.updateOne(
             { student_id },
-            { 
-              $inc: incData,
-              $set: { updated_at: new Date().toISOString() }
-            },
+            { $inc: incData, $set: { updated_at: new Date().toISOString() } },
             { upsert: true }
           );
         }
@@ -555,6 +489,37 @@ app.use(express.static(path.join(__dirname, 'public')));
       res.status(500).json({ error: String(err) });
     }
   });
+
+  app.get('/api/attendance/:studentId', async (req, res) => {
+    const studentId = req.params.studentId;
+    try {
+      const attendanceColl = getCollection('attendance');
+      let att = await attendanceColl.findOne({ student_id: studentId });
+      if (!att) {
+        const newAtt = { student_id: studentId, days_present: 0, total_days: 0, updated_at: new Date().toISOString() };
+        await attendanceColl.insertOne(newAtt);
+        att = newAtt;
+      }
+      res.json({ id: att._id ? att._id.toString() : null, student_id: att.student_id, days_present: att.days_present, total_days: att.total_days, updated_at: att.updated_at });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.put('/api/attendance/:studentId', async (req, res) => {
+    const studentId = req.params.studentId;
+    const { days_present, total_days } = req.body;
+    try {
+      const updateData = { days_present: parseInt(days_present), total_days: parseInt(total_days), updated_at: new Date().toISOString() };
+      await getCollection('attendance').updateOne({ student_id: studentId }, { $set: updateData }, { upsert: true });
+      const record = await getCollection('attendance').findOne({ student_id: studentId });
+      res.json({ id: record._id.toString(), student_id: record.student_id, days_present: record.days_present, total_days: record.total_days, updated_at: record.updated_at });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+
 
   // ═══════════════════════════════════════
   //  MARKS ROUTES

@@ -690,43 +690,55 @@ function renderMarksGrouped(marks) {
     const examGrade   = examPct >= 90 ? 'O' : examPct >= 80 ? 'A+' : examPct >= 70 ? 'A'
                       : examPct >= 60 ? 'B+' : examPct >= 50 ? 'B' : examPct >= 40 ? 'C' : 'F';
 
+    const rows = exam.subjects.map((m, i) => {
+      const pct   = Math.round((m.scored_marks / m.total_marks) * 100);
+      const grade = pct >= 90 ? 'O' : pct >= 80 ? 'A+' : pct >= 70 ? 'A' : pct >= 60 ? 'B+' : pct >= 50 ? 'B' : pct >= 40 ? 'C' : 'F';
+      const gc    = pct >= 75 ? 'success' : pct >= 50 ? 'warning' : 'danger';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><strong>${escapeHtml(m.subject)}</strong></td>
+        <td>${m.scored_marks}</td>
+        <td>${m.total_marks}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="progress-bar-wrapper" style="width:70px;height:5px;">
+              <div class="progress-bar" style="width:${pct}%;background:${pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)'};border-radius:99px;"></div>
+            </div>
+            <span class="badge badge-${gc}">${pct}%</span>
+          </div>
+        </td>
+        <td><span class="badge badge-${gc}">${grade}</span></td>
+      </tr>`;
+    }).join('');
+
     return `
       <div class="marks-student-group" style="margin-bottom:24px;">
-        <!-- Exam Header -->
-        <div class="marks-student-header" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div class="marks-student-header" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <span class="badge ${exam.exam_type === 'sem' ? 'badge-primary' : 'badge-purple'}" style="font-size:0.8rem;">
             ${exam.exam_type === 'sem' ? '📚 Semester Exam' : '📝 CAT / Mid Exam'}
           </span>
-          <span style="font-weight:700; color:var(--navy); font-size:1rem;">${escapeHtml(exam.exam_name)}</span>
-          <span style="margin-left:auto; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:0.8rem; color:var(--text-2);">${exam.subjects.length} subject${exam.subjects.length !== 1 ? 's' : ''}</span>
-            <span class="badge badge-${examGc}">${examPct}% • ${examGrade}</span>
+          <span style="font-weight:700;color:var(--navy);font-size:1rem;">${escapeHtml(exam.exam_name)}</span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:0.8rem;color:var(--text-2);">${exam.subjects.length} subject${exam.subjects.length !== 1 ? 's' : ''}</span>
+            <span class="badge badge-${examGc}">${examPct}%</span>
           </span>
         </div>
-
-        <!-- Subjects Table -->
-        <div class="table-wrapper" style="border-top:none; border-radius:0 0 var(--radius) var(--radius);">
+        <div class="table-wrapper" style="border-top:none;border-radius:0 0 var(--radius) var(--radius);">
           <table>
-            <thead>
-              <tr>
-                <td>${m.scored_marks}</td>
-                <td>${m.total_marks}</td>
-                <td>
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <div class="progress-bar-wrapper" style="width:70px; height:5px;">
-                      <div class="progress-bar" style="width:${pct}%; background:${pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)'};"></div>
-                    </div>
-                    <span class="badge badge-${gc}">${pct}%</span>
-                  </div>
-                </td>
-                <td><span class="badge badge-${gc}">${grade}</span></td>
+            <thead><tr><th>#</th><th>Subject</th><th>Scored</th><th>Total</th><th>%</th><th>Grade</th></tr></thead>
+            <tbody>
+              ${rows}
+              <tr style="background:var(--bg-hover);font-weight:700;">
+                <td colspan="2" style="color:var(--navy);">📊 Total</td>
+                <td>${totalScored}</td><td>${totalMax}</td>
+                <td><span class="badge badge-${examGc}">${examPct}%</span></td>
+                <td><span class="badge badge-${examGc}">${examGrade}</span></td>
               </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function switchMarksTab(type, btn) {
