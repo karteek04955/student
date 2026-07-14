@@ -9,7 +9,7 @@ services:
       - key: PORT
         value: 10000
       - key: MONGODB_URI
-        value: "mongodb://kakumanukarteek:karteek500@ac-nj9210o-shard-00-00.dldj7nr.mongodb.net:27017,ac-nj9210o-shard-00-01.dldj7nr.mongodb.net:27017,ac-nj9210o-shard-00-02.dldj7nr.mongodb.net:27017/studentos?ssl=true&replicaSet=atlas-tuyl59-shard-0&authSource=admin&retryWrites=true&w=majority"
+        value: "mongodb://kakumanukarteek:karteek500@ac-nj9210o-shard-00-00.dldj7nr.mongodb.net:27017,ac-nj9210o-shard-00-01.dldj7nr.mongodb.net:27017,ac-nj9210o-shard-00-02.dldj7nr.mongodb.net:27017/studentos?tls=true&replicaSet=atlas-tuyl59-shard-0&authSource=admin&retryWrites=true&w=majority"
       - key: GROQ_API_KEY
         sync: false
 
